@@ -10,7 +10,7 @@ def parse_args() -> Namespace:
         type=int, default=5, metavar='N', choices=list(range(1, 11)))
 
     display_group = parser.add_argument_group('display')
-    display_group.add_argument('-g', '--gui', action='store_true',
+    display_group.add_argument('-u', '--user-interface', action='store_true',
         help='Use the graphical user interface instead of the console')
     display_group.add_argument('-s', '--suggestion', action='store_true',
         help='Move suggestion for the human player')
@@ -34,6 +34,8 @@ def parse_args() -> Namespace:
         choices={'player1', 'player2', 'both'}, default='both')
     rules_group.add_argument('-c', '--capture', type=int, default=5, metavar='N',
         help='Number of captures to win')
+    rules_group.add_argument('-g', '--gravity', action='store_true',
+        help='Enable gravity for the stones like in connect4')
     
     return parser.parse_args()
 
