@@ -1,0 +1,23 @@
+from setuptools import find_packages, setup
+
+with open("README.md", "r", encoding="utf-8") as fh:
+    long_description = fh.read()
+
+with open('LICENSE') as f:
+    license = f.read()
+
+setup(
+    name="gomoku",
+    version="0.0.1",
+    author="John Afaghpour",
+    author_email="johnafaghpour@gmail.com",
+    description="A simple implementation of the Gomoku game.",
+    long_description=long_description,
+    long_description_content_type="text/markdown",
+    url="https://github.com/jafaghpo/Gomoku",
+    package_dir={'': 'src'},
+    license=license,
+    packages=find_packages('src', exclude=('tests', 'docs')),
+    python_requires=">=3.10.1",
+    install_requires=[]
+)
