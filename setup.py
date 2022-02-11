@@ -15,9 +15,9 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/jafaghpo/Gomoku",
-    package_dir={'': 'src'},
+    package_dir={'gomoku': 'gomoku'},
     license=license,
-    packages=find_packages('src', exclude=('tests', 'docs')),
+    packages=find_packages('gomoku', exclude=('tests', 'docs')),
     python_requires=">=3.10.1",
-    install_requires=[]
+    install_requires=["pytest", "pygame", "numpy"],
 )

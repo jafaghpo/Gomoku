@@ -32,3 +32,15 @@ To run the program and see the full list of flags/options, run
 ```bash
 python3 -m gomoku --help
 ```
+
+### Here is the full list of options/features grouped by theme:
+
+!["engine help"](assets/screenshots/gomoku_engine_help.png?raw=true)
+
+!["display help"](assets/screenshots/gomoku_display_help.png?raw=true)
+
+!["player help"](assets/screenshots/gomoku_player_help.png?raw=true)
+
+!["rules help"](assets/screenshots/gomoku_rule_help.png?raw=true)
+
+!["game mode help"](assets/screenshots/gomoku_mode_help.png?raw=true)
