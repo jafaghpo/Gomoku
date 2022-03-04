@@ -35,12 +35,12 @@ python3 -m gomoku --help
 
 ### Here is the full list of options/features grouped by theme:
 
-!["engine help"](assets/screenshots/gomoku_engine_help.png?raw=true)
+!["engine help"](assets/screenshots/engine_help.png?raw=true)
 
-!["display help"](assets/screenshots/gomoku_display_help.png?raw=true)
+!["display help"](assets/screenshots/display_help.png?raw=true)
 
-!["player help"](assets/screenshots/gomoku_player_help.png?raw=true)
+!["player help"](assets/screenshots/player_help.png?raw=true)
 
-!["rules help"](assets/screenshots/gomoku_rule_help.png?raw=true)
+!["rules help"](assets/screenshots/rules_help.png?raw=true)
 
-!["game mode help"](assets/screenshots/gomoku_mode_help.png?raw=true)
+!["game mode help"](assets/screenshots/game_mode_help.png?raw=true)

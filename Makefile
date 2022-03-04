@@ -5,8 +5,11 @@ VENV = $(VENVDIR)/bin
 
 .PHONY: install clean
 
-install:
+install_prod:
 	@python3 -m pip install -e .
+
+install_dev:
+	@python3 -m pip install -e .[dev]
 
 clean:
 	@python3 setup.py clean
@@ -15,4 +18,6 @@ clean:
 	@rm -rf $(NAME).egg-info/ 		2> /dev/null || true
 	@find . -iname "*.pyc" -delete		2> /dev/null || true
 
-re: clean install
+re_prod: clean install_prod
+
+re_dev: clean install_dev
