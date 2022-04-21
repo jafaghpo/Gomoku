@@ -24,5 +24,6 @@ def dumb_algo(board: Board) -> Position | None:
     """
     A dumb algorithm that just returns the first available position.
     """
-    pos = np.unravel_index(np.argmax(board == 0, axis=None), board.shape)
-    return Position(*map(int, pos)) if not board[pos] else None
+    pos = np.unravel_index(np.argmax(board.cells == 0, axis=None), board.cells.shape)
+    print(f"Dumb algorithm chose {pos}")
+    return tuple(map(int, pos)) if not board.cells[pos] else None
