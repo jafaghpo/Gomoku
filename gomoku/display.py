@@ -77,6 +77,25 @@ class Display:
             index = tuple(index)
             self.render_cell(index, self.board.cells[index] - 1)
 
+    def render_last_move(self, pos: Position) -> None:
+        if self.board.last_move:
+            self.render_cell(
+                self.board.last_move, self.board.cells[self.board.last_move] - 1
+            )
+
+        rect_size = CELL_SIZE // 6
+        pygame.draw.rect(
+            self.screen,
+            [255, 0, 0],
+            (
+                pos[1] * CELL_SIZE + PADDING - rect_size // 2 + 1,
+                pos[0] * CELL_SIZE + PADDING - rect_size // 2 + 1,
+                rect_size,
+                rect_size,
+            ),
+        )
+        self.board.last_move = pos
+
     def get_valid_move(self) -> Position | None:
         pos = pygame.mouse.get_pos()
         x, y = ((p - PADDING // 2) // CELL_SIZE for p in pos)
@@ -96,6 +115,7 @@ class Display:
             self.render_background()
             self.render_board()
             self.render_all_cells()
+            self.render_last_move(self.board.last_move)
         self.update()
         self.game_over = False
 
@@ -130,7 +150,8 @@ class Display:
                 should_render = True
             if should_render:
                 self.board_history.append(deepcopy(self.board))
-                self.board.cells[pos] = self.player_turn + 1
+                self.board.add_move(pos, self.player_turn + 1)
                 self.render_cell(pos, self.player_turn)
+                self.render_last_move(pos)
                 self.update()
                 self.player_turn ^= 1
