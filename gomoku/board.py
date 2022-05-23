@@ -1,9 +1,28 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import NewType
 import numpy as np
 from enum import IntEnum
 
 Position = NewType("Position", tuple[int, int])
+
+NEIGHBORS_OFFSET = (
+    (-2, -2),
+    (-2, 0),
+    (-2, 2),
+    (-1, -1),
+    (-1, 0),
+    (-1, 1),
+    (0, -2),
+    (0, -1),
+    (0, 1),
+    (0, 2),
+    (1, -1),
+    (1, 0),
+    (1, 1),
+    (2, -2),
+    (2, 0),
+    (2, 2),
+)
 
 
 class ThreatType(IntEnum):
@@ -52,6 +71,7 @@ class Board:
     cells: np.ndarray
     seq_map: dict[Position, list[int]]
     seq_list: dict[int, Sequence]
+    children: set[Position]
     last_seq_id = 0
     last_move: Position | None = None
 
@@ -59,6 +79,7 @@ class Board:
         self.cells = np.zeros(shape, dtype=np.uint8)
         self.sequence_map = {}
         self.sequences = {}
+        self.children = set()
 
     def __str__(self) -> str:
         player_repr = {0: ".", 1: "X", 2: "O"}
@@ -75,7 +96,29 @@ class Board:
 
     def add_move(self, pos: Position, player: int) -> None:
         self.cells[pos] = player
-        # if not pos in self.seq_map:
-        #     self.seq_map[pos] = [self.last_seq_id]
-        #     self.seq_list[self.last_seq_id] = Sequence()
-        #     self.last_seq_id += 1
+        self.last_move = pos
+        self.children.update(self.generate_children(pos))
+        self.children.discard(pos)
+        if not pos in self.seq_map:
+            self.seq_map[pos] = [self.last_seq_id]
+            self.seq_list[self.last_seq_id] = Sequence()
+            self.last_seq_id += 1
+
+    def generate_children(self, current: Position) -> list[Position]:
+        def in_bounds_and_empty(pos: Position) -> bool:
+            return (
+                0 <= pos[0] < self.cells.shape[0]
+                and 0 <= pos[1] < self.cells.shape[1]
+                and self.cells[pos] == 0
+            )
+
+        def apply_offset(offset: Position) -> Position:
+            return (current[0] + offset[0], current[1] + offset[1])
+
+        neighbors = list(
+            filter(
+                in_bounds_and_empty,
+                map(apply_offset, NEIGHBORS_OFFSET),
+            )
+        )
+        return neighbors

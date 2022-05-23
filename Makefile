@@ -1,7 +1,5 @@
 NAME := gomoku
 WORKDIR ?= .
-VENVDIR ?= $(WORKDIR)/venv
-VENV = $(VENVDIR)/bin
 
 .PHONY: install clean
 

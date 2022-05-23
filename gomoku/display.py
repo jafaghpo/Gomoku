@@ -94,7 +94,6 @@ class Display:
                 rect_size,
             ),
         )
-        self.board.last_move = pos
 
     def get_valid_move(self) -> Position | None:
         pos = pygame.mouse.get_pos()
@@ -150,8 +149,8 @@ class Display:
                 should_render = True
             if should_render:
                 self.board_history.append(deepcopy(self.board))
-                self.board.add_move(pos, self.player_turn + 1)
                 self.render_cell(pos, self.player_turn)
                 self.render_last_move(pos)
                 self.update()
+                self.board.add_move(pos, self.player_turn + 1)
                 self.player_turn ^= 1
