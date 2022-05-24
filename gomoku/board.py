@@ -104,10 +104,10 @@ class Board:
         self.last_move = pos
         self.children.update(self.generate_children(pos))
         self.children.discard(pos)
-        if not pos in self.seq_map:
-            self.seq_map[pos] = [self.last_seq_id]
-            self.seq_list[self.last_seq_id] = Sequence()
-            self.last_seq_id += 1
+        #if not pos in self.seq_map:
+        #    self.seq_map[pos] = [self.last_seq_id]
+        #    self.seq_list[self.last_seq_id] = Sequence()
+        #    self.last_seq_id += 1
 
     def generate_children(self, current: Position) -> list[Position]:
         def in_bounds_and_empty(pos: Position) -> bool:

@@ -22,6 +22,7 @@ setup(
     install_requires=[
         "pygame>=2.1.2",
         "numpy>=1.22.2",
+        "pygame_menu>=4.2.8",
     ],
     extras_require={
         "dev": [
