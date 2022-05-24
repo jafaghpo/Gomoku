@@ -24,6 +24,11 @@ NEIGHBORS_OFFSET = (
     (2, 2),
 )
 
+UP, UP_LEFT, UP_RIGHT = (-1, 0), (-1, -1), (-1, 1)
+DOWN, DOWN_LEFT, DOWN_RIGHT = (1, 0), (1, -1), (1, 1)
+LEFT, RIGHT = (0, -1), (0, 1)
+DIRECTIONS = ((LEFT, RIGHT), (UP_LEFT, DOWN_RIGHT), (UP, DOWN), (UP_RIGHT, DOWN_LEFT))
+
 
 class ThreatType(IntEnum):
     # Five in a row.
@@ -122,3 +127,21 @@ class Board:
             )
         )
         return neighbors
+
+    def combine_half_sequences(first: Sequence, second: Sequence) -> Sequence | None:
+        pass
+
+    def search_half_sequence(
+        self, pos: Position, dir: Position, player: int
+    ) -> Sequence | None:
+        pass
+
+    def search_sequences(self, pos: Position, player: int) -> list[Sequence]:
+        sequences = []
+        for first_dir, second_dir in DIRECTIONS:
+            first_seq = self.search_half_sequence(pos, first_dir, player)
+            second_seq = self.search_half_sequence(pos, second_dir, player)
+            sequence = self.combine_half_sequences(first_seq, second_seq)
+            if sequence:
+                sequences.append(sequence)
+        return sequences
