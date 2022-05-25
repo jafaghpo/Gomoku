@@ -16,20 +16,64 @@ SCREEN_SIZE = BASE_SIZE + (BOARD_SIZE - 1) * CELL_SIZE
 
 TEXT_PATH = "./assets/textures"
 
+
+class OptionMenu:
+
+    def __init__(self, args, display):
+        self.menu = pygame_menu.Menu('Options', SCREEN_SIZE, SCREEN_SIZE, theme=pygame_menu.themes.THEME_DARK)
+        self.args = args
+        self.display = display
+        self.menu.add.text_input('Board size :', default='19', maxchar=2, onchange=self.on_board_size_change)
+        self.menu.add.text_input('Game Time :', default='500', maxchar=4, onchange=self.on_time_change)
+        
+        self.menu.add.button('Return to main menu', pygame_menu.events.RESET)
+
+
+    def on_board_size_change(self, board_size: str):
+        global BOARD_SIZE
+        global SCREEN_SIZE
+        selected = board_size
+        print(f'Selected Board size: "{selected}" ({board_size})')
+        if selected == '':
+            selected = '9'
+        BOARD_SIZE = int(selected)
+        SCREEN_SIZE = BASE_SIZE + (BOARD_SIZE - 1) * CELL_SIZE
+
+
+    def on_time_change(self, time: str):
+        selected = time
+        print(f'Selected Game time: "{selected}" ({time})')
+        self.args.time = selected
+
+
+
+class MatchMenu:
+    def __init__(self, display):
+        self.menu = pygame_menu.Menu('Pause', SCREEN_SIZE, SCREEN_SIZE, theme=pygame_menu.themes.THEME_DARK)
+        self.display = display
+
+        self.menu.add.button('Resume', self.menu.close)
+        self.menu.add.button('Quit', self.on_quit)
+
+    def on_quit(self):
+        sys.exit(pygame.quit())
+
 class GameMenu:
     def __init__(self, args, display):
         self.menu = pygame_menu.Menu('Gomoku', SCREEN_SIZE, SCREEN_SIZE, theme=pygame_menu.themes.THEME_DARK)
         self.args = args
         self.display = display
+        optionmenu = OptionMenu(self.args, self.display)
         self.player1_type = "human"
         self.player2_type = "engine"
+        self.menu.add.button('Start', self.on_start)
         self.menu.add.selector('Player 1',
                                [('Human', 'human'), ('Engine', 'engine')],
                                onchange=self.on_player1_change)
         self.menu.add.selector('Player 2',
                                [('Engine', 'engine'), ('Human', 'human')],
                                onchange=self.on_player2_change)
-        self.menu.add.button('Start', self.on_start)
+        self.menu.add.button('Options', optionmenu.menu)
         self.menu.add.button('Quit', self.on_quit)
 
 
@@ -44,7 +88,6 @@ class GameMenu:
         self.player2_type = selected[1]
 
     def on_start(self):
-        print("Allo ???")
         self.args.players = [self.player1_type, self.player2_type]
         print("final args:")
         print(self.args)
@@ -62,9 +105,6 @@ class Display:
         pygame.display.set_caption("Gomoku")
 
         self.background = pygame.image.load(f"{TEXT_PATH}/classic_background.png")
-        self.render_background()
-        self.render_board()
-        self.update()
 
         self.stone_text = (
             f"{TEXT_PATH}/classic_black_stone.png",
@@ -99,6 +139,9 @@ class Display:
 
     def update(self) -> None:
         pygame.display.update()
+
+    def update_window_size(self) -> None:
+        self.screen = pygame.display.set_mode((SCREEN_SIZE, SCREEN_SIZE))
 
     def render_cell(self, pos: Position, player: int) -> None:
         stone = pygame.image.load(self.stone_text[player])
@@ -138,6 +181,7 @@ class Display:
     def get_valid_move(self) -> Position | None:
         pos = pygame.mouse.get_pos()
         x, y = ((p - PADDING // 2) // CELL_SIZE for p in pos)
+        print (x, y)
         if self.board.valid_move((y, x)):
             return (y, x)
 
@@ -158,7 +202,7 @@ class Display:
         self.update()
         self.game_over = False
 
-    def handle_event(self) -> Position | None:
+    def handle_event(self, matchmenu) -> Position | None:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 sys.exit(pygame.quit())
@@ -168,17 +212,20 @@ class Display:
                 if event.key == pygame.K_q:
                     sys.exit(pygame.quit())
                 if event.key == pygame.K_ESCAPE:
-                    sys.exit(pygame.quit())
+                    matchmenu.menu.mainloop(self.screen)
+                    print("menu")
                 elif event.key == pygame.K_BACKSPACE:
                     self.cancel_last_moves()
 
     def run(self, args: Namespace) -> None:
+        self.update_window_size()
         self.render_background()
         self.render_board()
         self.update()
+        matchmenu = MatchMenu(self)
         player_type = args.players
         while True:
-            pos = self.handle_event()
+            pos = self.handle_event(matchmenu)
             if self.game_over:
                 continue
             if player_type[self.player_turn] == "human":
@@ -189,6 +236,7 @@ class Display:
                 if not pos:
                     self.game_over = True
                     continue
+            print(f'SCREEN_SIZE: {SCREEN_SIZE} BOARD_SIZE: {BOARD_SIZE} TIME_LIMIT: {args.time}')
             self.board_history.append(deepcopy(self.board))
             self.render_cell(pos, self.player_turn)
             self.render_last_move(pos)

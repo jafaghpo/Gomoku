@@ -81,6 +81,7 @@ class Board:
     last_move: Position | None = None
 
     def __init__(self, shape: tuple[int, int] = (19, 19)) -> None:
+        print("Initializing board")
         self.cells = np.zeros(shape, dtype=np.uint8)
         self.sequence_map = {}
         self.sequences = {}
