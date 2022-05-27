@@ -224,7 +224,7 @@ class Display:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 sys.exit(pygame.quit())
-            if event.type == pygame.MOUSEBUTTONDOWN:
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 return self.get_valid_move()
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_q:
