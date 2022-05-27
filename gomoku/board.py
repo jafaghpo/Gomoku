@@ -30,7 +30,7 @@ LEFT, RIGHT = (0, -1), (0, 1)
 DIRECTIONS = ((LEFT, RIGHT), (UP_LEFT, DOWN_RIGHT), (UP, DOWN), (UP_RIGHT, DOWN_LEFT))
 
 
-class ThreatType(IntEnum):
+class SeqType(IntEnum):
     # Five in a row.
     # o o o o o
     FIVE = 5
@@ -57,14 +57,36 @@ class Sequence:
     A sequence is a set of cells that are aligned in some way.
     """
 
-    type: ThreatType
-    id: int
-    player_id: int
+    type: SeqType | None = None
+    id: int | None = None
+    player: int | None = None
+    dir: Position
+    dist_start: int = 0
+    max_len: int = 0
+    hole: Position | None = None
+    cells: list[Position]
+    growth_cells: list[Position]
+    block: list[Position]
 
-    def __init__(self, cells: list[Position], id: int, player_id: int):
-        self.cells = cells
+    def __init__(self, dir: Position, player: int | None = None, id: int | None = None):
+        self.cells = []
+        self.growth_cells = []
+        self.block = []
         self.id = id
-        self.player_id = player_id
+        self.player = player
+        self.dir = dir
+
+    def __str__(self):
+        return f"""Sequence {self.id}
+- player: {self.player},
+- direction: {self.dir},
+- distance from start: {self.dist_start},
+- maximum possible length: {self.max_len},
+- hole position: {self.hole},
+- stones in sequence: {self.cells},
+- empty cells around sequence: {self.growth_cells},
+- opponent stones blocking the sequence: {self.block})
+"""
 
 
 @dataclass(init=False, repr=True)
@@ -105,7 +127,8 @@ class Board:
         self.last_move = pos
         self.children.update(self.generate_children(pos))
         self.children.discard(pos)
-        #if not pos in self.seq_map:
+        # self.search_sequences(pos)
+        # if not pos in self.seq_map:
         #    self.seq_map[pos] = [self.last_seq_id]
         #    self.seq_list[self.last_seq_id] = Sequence()
         #    self.last_seq_id += 1
@@ -129,20 +152,73 @@ class Board:
         )
         return neighbors
 
-    def combine_half_sequences(first: Sequence, second: Sequence) -> Sequence | None:
-        pass
+    def within_bounds(self, pos: Position) -> bool:
+        return 0 <= pos[0] < self.cells.shape[0] and 0 <= pos[1] < self.cells.shape[1]
 
-    def search_half_sequence(
-        self, pos: Position, dir: Position, player: int
-    ) -> Sequence | None:
-        pass
+    def search_sequence(self, start: Position, dir: Position) -> Sequence | None:
+        def increment_pos(pos: Position, dir: Position) -> None:
+            return (pos[0] + dir[0], pos[1] + dir[1])
 
-    def search_sequences(self, pos: Position, player: int) -> list[Sequence]:
+        def get_max_len(seq: Sequence, current: Position) -> int:
+            max_len = seq.max_len
+            while self.within_bounds(current) and self.cells[current] == 0:
+                current = increment_pos(current, dir)
+                max_len += 1
+            return max_len
+
+        seq = Sequence(dir)
+        end_sequence = 0
+        current = start
+
+        while self.within_bounds(current) and end_sequence < 2:
+            match (seq.player, self.cells[current]):
+                # If no player was assigned to the sequence and the current cell is
+                # empty, then increment the distance from the starting index
+                case (None, 0):
+                    seq.dist_start += 1
+
+                # If the current cell contains a player id and no player
+                # was assigned yet, then assign the player to the sequence
+                # and increment the size of the sequence
+                case (None, cell):
+                    seq.player = cell
+                    player = cell
+                    seq.cells.append(current)
+
+                # If the current cell is empty, check the next cell to see
+                # if it's the sequence is holed or if this is the end of the sequence
+                case (player, 0):
+                    pos = increment_pos(current, dir)
+                    match (
+                        seq.hole,
+                        self.within_bounds(pos) and self.cells[pos] == player,
+                    ):
+                        case (None, True):
+                            seq.hole = current
+                        case _:
+                            end_sequence = True
+
+                # If the current cell contains the same player id as the sequence,
+                # increment the size of the sequence
+                case (player, cell) if player == cell:
+                    match not seq.hole or len(seq.cells) < 4:
+                        case True:
+                            seq.cells.append(current)
+                        case False:
+                            end_sequence = True
+
+                # If there is an opponent stone, end the sequence
+                case (player, cell) if player != cell:
+                    seq.counter_cells.append(current)
+                    end_sequence = True
+            seq.max_len += 1
+            current = increment_pos(current, dir)
+        return seq if len(seq.cells) > 1 else None
+
+    def search_sequences(self, pos: Position) -> list[Sequence]:
         sequences = []
-        for first_dir, second_dir in DIRECTIONS:
-            first_seq = self.search_half_sequence(pos, first_dir, player)
-            second_seq = self.search_half_sequence(pos, second_dir, player)
-            sequence = self.combine_half_sequences(first_seq, second_seq)
+        for dirs in DIRECTIONS:
+            sequence = self.search_sequence(pos, dirs)
             if sequence:
                 sequences.append(sequence)
         return sequences
