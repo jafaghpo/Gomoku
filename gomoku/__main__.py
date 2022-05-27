@@ -1,6 +1,6 @@
 from sys import argv
 from argparse import ArgumentParser, Namespace
-from gomoku.display import Display, GameMenu
+from gomoku.display import Display, GameMenu, MatchMenu
 
 
 def parse_args(argv: list[str]) -> Namespace:
@@ -24,6 +24,7 @@ def parse_args(argv: list[str]) -> Namespace:
     parser.add_argument(
         "-s",
         "--size",
+        choices=range(10, 25),
         type=int,
         default=19,
         help="Size of the board",

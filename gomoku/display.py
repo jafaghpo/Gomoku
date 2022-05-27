@@ -14,6 +14,7 @@ PADDING = BASE_SIZE // 2
 TEXT_PATH = "./assets/textures"
 
 
+# Option menu inside the start menu
 class OptionMenu:
     def __init__(self, display):
         self.menu = pygame_menu.Menu(
@@ -23,46 +24,83 @@ class OptionMenu:
             theme=pygame_menu.themes.THEME_DARK,
         )
         self.display = display
-        self.menu.add.text_input(
-            "Board size :", default="19", maxchar=2, onchange=self.on_board_size_change
+        self.menu.add.dropselect(
+            title="Pick a board size",
+            items=[
+                ("10", 10),
+                ("11", 11),
+                ("12", 12),
+                ("13", 13),
+                ("14", 14),
+                ("15", 15),
+                ("16", 16),
+                ("17", 17),
+                ("18", 18),
+                ("19", 19),
+                ("20", 20),
+                ("21", 21),
+                ("22", 22),
+                ("23", 23),
+                ("24", 24),
+            ],
+            font_size=20,
+            default=9,
+            open_middle=True,  # Opens in the middle of the menu
+            selection_box_height=5,
+            selection_box_width=212,
+            selection_infinite=True,
+            selection_option_font_size=20,
+            onchange=self.on_board_size_change,
         )
         self.menu.add.text_input(
-            "Game Time :", default="500", maxchar=4, onchange=self.on_time_change
+            "Algo time limit (ms): ",
+            default="500",
+            maxchar=4,
+            onchange=self.on_time_change,
         )
 
         self.menu.add.button("Return to main menu", pygame_menu.events.RESET)
 
-    def on_board_size_change(self, board_size: str):
-        selected = board_size
-        print(f'Selected Board size: "{selected}" ({board_size})')
-        if selected == "":
-            selected = "9"
-        self.display.args.size = int(selected)
+    def on_board_size_change(self, value: tuple, board_size: str):
+        selected, index = value
+        print(f'Selected difficulty: "{selected}" ({board_size}) at index {index}')
+        self.display.args.size = int(board_size)
         self.display.screen_size = BASE_SIZE + (self.display.args.size - 1) * CELL_SIZE
 
     def on_time_change(self, time: str):
         selected = time
-        print(f'Selected Game time: "{selected}" ({time})')
+        print(f'Algo time limit (ms): "{selected}" ({time})')
         self.display.args.time = selected
 
 
+# Pause menu that appears when the game is paused
 class MatchMenu:
     def __init__(self, display):
+        mytheme = pygame_menu.Theme(
+            background_color=(0, 0, 0, 0),  # transparent background
+            title_background_color=(4, 47, 126),
+            title_font_shadow=True,
+            widget_padding=25,
+        )
+        self.display = display
         self.menu = pygame_menu.Menu(
             "Pause",
             display.screen_size,
             display.screen_size,
-            theme=pygame_menu.themes.THEME_DARK,
+            theme=mytheme,
         )
-        self.display = display
 
-        self.menu.add.button("Resume", self.menu.close)
+        self.menu.add.button("Resume", self.on_resume)
         self.menu.add.button("Quit", self.on_quit)
 
     def on_quit(self):
         sys.exit(pygame.quit())
 
+    def on_resume(self):
+        self.menu.close(self.display.run())
 
+
+# Game menu that appears when the game is started, contains the option menu
 class GameMenu:
     def __init__(self, display):
         self.menu = pygame_menu.Menu(
@@ -131,6 +169,7 @@ class Display:
         self.board_history = []
         self.player_turn = 0
         self.game_over = False
+        self.match_menu = MatchMenu(self)
 
     def render_background(self) -> None:
         self.screen.blit(self.background, (0, 0))
@@ -220,29 +259,33 @@ class Display:
         self.update()
         self.game_over = False
 
-    def handle_event(self, match_menu) -> Position | None:
+    def handle_event(self) -> Position | None:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 sys.exit(pygame.quit())
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 return self.get_valid_move()
             if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_q:
-                    sys.exit(pygame.quit())
                 if event.key == pygame.K_ESCAPE:
-                    match_menu.menu.mainloop(self.screen)
+                    sys.exit(pygame.quit())
+                if event.key == pygame.K_RETURN:
+                    self.match_menu.menu.mainloop(self.screen)
                 elif event.key == pygame.K_BACKSPACE:
                     self.cancel_last_moves()
 
+    # Main loop of the whole game, runs until the game is over and after the start menu.
     def run(self) -> None:
-        self.board = Board((self.args.size, self.args.size))
+        if not self.board:
+            self.board = Board((self.args.size, self.args.size))
         self.render_background()
         self.render_board()
+        self.render_all_cells()
+        if self.board.last_move:
+            self.render_last_move(self.board.last_move)
         self.update()
-        match_menu = MatchMenu(self)
         player_type = self.args.players
         while True:
-            pos = self.handle_event(match_menu)
+            pos = self.handle_event()
             if self.game_over:
                 continue
             if player_type[self.player_turn] == "human":
