@@ -2,8 +2,9 @@ import pygame
 import pygame_menu
 import numpy as np
 import sys
+import time
 from copy import deepcopy
-from gomoku.board import Board, Position
+from gomoku.board import Board, Coord
 from gomoku.engine import dumb_algo
 
 CELL_SIZE = 40
@@ -201,24 +202,23 @@ class Display:
     def update(self) -> None:
         pygame.display.update()
 
-    def render_cell(self, pos: Position, player: int) -> None:
+    def render_cell(self, pos: Coord, player: int) -> None:
         stone = pygame.image.load(self.stone_text[player])
         stone = pygame.transform.scale(stone, (CELL_SIZE * 0.9, CELL_SIZE * 0.9))
         self.screen.blit(
             stone,
             (
-                pos[1] * CELL_SIZE + PADDING * 1.05 - CELL_SIZE // 2,
-                pos[0] * CELL_SIZE + PADDING * 1.05 - CELL_SIZE // 2,
+                pos.x * CELL_SIZE + PADDING * 1.05 - CELL_SIZE // 2,
+                pos.y * CELL_SIZE + PADDING * 1.05 - CELL_SIZE // 2,
             ),
         )
 
     def render_all_cells(self) -> None:
         indexes = np.argwhere(self.board.cells != 0)
         for index in indexes:
-            index = tuple(index)
-            self.render_cell(index, self.board.cells[index] - 1)
+            self.render_cell(Coord(index), self.board.cells[index] - 1)
 
-    def render_last_move(self, pos: Position) -> None:
+    def render_last_move(self, pos: Coord) -> None:
         if self.board.last_move:
             self.render_cell(
                 self.board.last_move, self.board.cells[self.board.last_move] - 1
@@ -229,18 +229,19 @@ class Display:
             self.screen,
             [255, 0, 0],
             (
-                pos[1] * CELL_SIZE + PADDING - rect_size // 2 + 1,
-                pos[0] * CELL_SIZE + PADDING - rect_size // 2 + 1,
+                pos.x * CELL_SIZE + PADDING - rect_size // 2 + 1,
+                pos.y * CELL_SIZE + PADDING - rect_size // 2 + 1,
                 rect_size,
                 rect_size,
             ),
         )
 
-    def get_valid_move(self) -> Position | None:
+    def get_valid_move(self) -> Coord | None:
         pos = pygame.mouse.get_pos()
         x, y = ((p - PADDING // 2) // CELL_SIZE for p in pos)
-        if self.board.valid_move((y, x)):
-            return (y, x)
+        pos = Coord(y, x)
+        if self.board.can_place(pos):
+            return pos
 
     def cancel_last_moves(self) -> None:
         if len(self.board_history) <= 2:
@@ -259,7 +260,7 @@ class Display:
         self.update()
         self.game_over = False
 
-    def handle_event(self) -> Position | None:
+    def handle_event(self) -> Coord | None:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 sys.exit(pygame.quit())
@@ -285,6 +286,7 @@ class Display:
         self.update()
         player_type = self.args.players
         while True:
+            time.sleep(0.01)
             pos = self.handle_event()
             if self.game_over:
                 continue

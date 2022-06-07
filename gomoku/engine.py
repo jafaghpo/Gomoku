@@ -1,5 +1,5 @@
 import numpy as np
-from gomoku.board import Board, Position
+from gomoku.board import Board, Coord
 from time import time
 from typing import Callable, Any
 
@@ -20,10 +20,10 @@ def timer(func: Callable) -> Callable:
 
 
 @timer
-def dumb_algo(board: Board) -> Position | None:
+def dumb_algo(board: Board) -> Coord | None:
     """
     A dumb algorithm that just returns the first available position.
     """
     pos = np.unravel_index(np.argmax(board.cells == 0, axis=None), board.cells.shape)
     print(f"Dumb algorithm chose {pos}")
-    return tuple(map(int, pos)) if not board.cells[pos] else None
+    return Coord(*map(int, pos)) if not board.cells[pos] else None
