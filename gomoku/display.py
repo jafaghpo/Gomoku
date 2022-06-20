@@ -199,6 +199,20 @@ class Display:
                 LINE_WIDTH,
             )
 
+    def render_connect4(self):
+        for y in range(6):
+            for x in range(self.args.size):
+                stone = pygame.image.load(f"{TEXT_PATH}/classic_black_stone.png")
+                stone = pygame.transform.scale(stone, (CELL_SIZE * 0.9, CELL_SIZE * 0.9))
+                self.screen.blit(
+                    stone,
+                    (
+                        pos.x * CELL_SIZE + PADDING * 1.05 - CELL_SIZE // 2,
+                        pos.y * CELL_SIZE + PADDING * 1.05 - CELL_SIZE // 2,
+                    ),
+                )
+        
+
     def update(self) -> None:
         pygame.display.update()
 
