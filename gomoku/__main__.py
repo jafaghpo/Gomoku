@@ -29,6 +29,12 @@ def parse_args(argv: list[str]) -> Namespace:
         default=19,
         help="Size of the board",
     )
+    parser.add_argument(
+        "-c4",
+        "--connect4",
+        action="store_true",
+        help="Switch to connect4 gamemode instead of gomoku",
+    )
 
     return parser.parse_args(argv)
 
