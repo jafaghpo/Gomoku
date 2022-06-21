@@ -1,3 +1,4 @@
+from tkinter.tix import CELL
 import pygame
 import pygame_menu
 import numpy as np
@@ -155,11 +156,19 @@ class Display:
     def __init__(self, args):
         pygame.init()
         self.args = args
+        print(self.args)
         self.screen_size = BASE_SIZE + (args.size - 1) * CELL_SIZE
-        self.screen = pygame.display.set_mode((self.screen_size, self.screen_size))
-        pygame.display.set_caption("Gomoku")
-
-        self.background = pygame.image.load(f"{TEXT_PATH}/classic_background.png")
+        if self.args.connect4:
+            print("wsh")
+            self.player1_type = "human"
+            self.player2_type = "human"
+            self.background = pygame.image.load(f"{TEXT_PATH}/connect4_background.png")
+            self.screen = pygame.display.set_mode((1920, 1200))
+            pygame.display.set_caption("Connect4")
+        else:
+            self.background = pygame.image.load(f"{TEXT_PATH}/classic_background.png")
+            self.screen = pygame.display.set_mode((self.screen_size, self.screen_size))
+            pygame.display.set_caption("Gomoku")
 
         self.stone_text = (
             f"{TEXT_PATH}/classic_black_stone.png",
@@ -175,57 +184,72 @@ class Display:
     def render_background(self) -> None:
         self.screen.blit(self.background, (0, 0))
 
-    def render_board(self):
-        for y in range(self.args.size):
-            pygame.draw.line(
-                self.screen,
-                [255, 255, 255],
-                (PADDING, y * CELL_SIZE + PADDING),
-                (
-                    (self.args.size - 1) * CELL_SIZE + PADDING,
-                    y * CELL_SIZE + PADDING,
-                ),
-                LINE_WIDTH,
-            )
-        for x in range(self.args.size):
-            pygame.draw.line(
-                self.screen,
-                [255, 255, 255],
-                (x * CELL_SIZE + PADDING, PADDING),
-                (
-                    x * CELL_SIZE + PADDING,
-                    (self.args.size - 1) * CELL_SIZE + PADDING,
-                ),
-                LINE_WIDTH,
-            )
-
     def render_connect4(self):
+        self.g_x = 1920 / 6
+        self.g_y = 1200 / 7
         for y in range(6):
-            for x in range(self.args.size):
-                stone = pygame.image.load(f"{TEXT_PATH}/classic_black_stone.png")
-                stone = pygame.transform.scale(stone, (CELL_SIZE * 0.9, CELL_SIZE * 0.9))
+            for x in range(7):
+                stone = pygame.image.load(f"{TEXT_PATH}/tmp.png")
+                stone = pygame.transform.scale(stone, (self.g_y, self.g_y))
                 self.screen.blit(
                     stone,
                     (
-                        pos.x * CELL_SIZE + PADDING * 1.05 - CELL_SIZE // 2,
-                        pos.y * CELL_SIZE + PADDING * 1.05 - CELL_SIZE // 2,
+                        x * self.g_x + (self.g_x / 2 - self.g_y / 2),
+                        y * self.g_y + (self.g_y / 2),
                     ),
                 )
-        
+
+    def render_board(self):
+        if self.args.connect4:
+            self.render_connect4()
+        else:
+            for y in range(self.args.size):
+                pygame.draw.line(
+                    self.screen,
+                    [255, 255, 255],
+                    (PADDING, y * CELL_SIZE + PADDING),
+                    (
+                        (self.args.size - 1) * CELL_SIZE + PADDING,
+                        y * CELL_SIZE + PADDING,
+                    ),
+                    LINE_WIDTH,
+                )
+            for x in range(self.args.size):
+                pygame.draw.line(
+                    self.screen,
+                    [255, 255, 255],
+                    (x * CELL_SIZE + PADDING, PADDING),
+                    (
+                        x * CELL_SIZE + PADDING,
+                        (self.args.size - 1) * CELL_SIZE + PADDING,
+                    ),
+                    LINE_WIDTH,
+                )
 
     def update(self) -> None:
         pygame.display.update()
 
     def render_cell(self, pos: Coord, player: int) -> None:
         stone = pygame.image.load(self.stone_text[player])
-        stone = pygame.transform.scale(stone, (CELL_SIZE * 0.9, CELL_SIZE * 0.9))
-        self.screen.blit(
-            stone,
-            (
-                pos.x * CELL_SIZE + PADDING * 1.05 - CELL_SIZE // 2,
-                pos.y * CELL_SIZE + PADDING * 1.05 - CELL_SIZE // 2,
-            ),
-        )
+        if self.args.connect4:
+            stone = pygame.transform.scale(stone, (self.g_y, self.g_y))
+            print(pos)
+            self.screen.blit(
+                stone,
+                (
+                    (pos.x + 1) * self.g_x - self.g_x / 2 - self.g_y / 2,
+                    (pos.y + 1) * self.g_y - self.g_y / 2,
+                ),
+            )
+        else:
+            stone = pygame.transform.scale(stone, (CELL_SIZE * 0.9, CELL_SIZE * 0.9))
+            self.screen.blit(
+                stone,
+                (
+                    pos.x * CELL_SIZE + PADDING * 1.05 - CELL_SIZE // 2,
+                    pos.y * CELL_SIZE + PADDING * 1.05 - CELL_SIZE // 2,
+                ),
+            )
 
     def render_all_cells(self) -> None:
         indexes = np.argwhere(self.board.cells != 0)
@@ -233,29 +257,38 @@ class Display:
             self.render_cell(Coord(index), self.board.cells[index] - 1)
 
     def render_last_move(self, pos: Coord) -> None:
-        if self.board.last_move:
-            self.render_cell(
-                self.board.last_move, self.board.cells[self.board.last_move] - 1
+        if self.args.connect4 == False:
+            if self.board.last_move:
+                self.render_cell(
+                    self.board.last_move, self.board.cells[self.board.last_move] - 1
+                )
+
+            rect_size = CELL_SIZE // 6
+            pygame.draw.rect(
+                self.screen,
+                [255, 0, 0],
+                (
+                    pos.x * CELL_SIZE + PADDING - rect_size // 2 + 1,
+                    pos.y * CELL_SIZE + PADDING - rect_size // 2 + 1,
+                    rect_size,
+                    rect_size,
+                ),
             )
 
-        rect_size = CELL_SIZE // 6
-        pygame.draw.rect(
-            self.screen,
-            [255, 0, 0],
-            (
-                pos.x * CELL_SIZE + PADDING - rect_size // 2 + 1,
-                pos.y * CELL_SIZE + PADDING - rect_size // 2 + 1,
-                rect_size,
-                rect_size,
-            ),
-        )
-
     def get_valid_move(self) -> Coord | None:
-        pos = pygame.mouse.get_pos()
-        x, y = ((p - PADDING // 2) // CELL_SIZE for p in pos)
-        pos = Coord(y, x)
-        if self.board.can_place(pos):
-            return pos
+        if self.args.connect4:
+            pos = pygame.mouse.get_pos()
+            print(pos)
+            x = pos[0] - self.g_x / 2 // self.g_x
+            print(x)
+            if self.board.can_place_c4(x):
+                return pos
+        else:
+            pos = pygame.mouse.get_pos()
+            x, y = ((p - PADDING // 2) // CELL_SIZE for p in pos)
+            pos = Coord(y, x)
+            if self.board.can_place(pos):
+                return pos
 
     def cancel_last_moves(self) -> None:
         if len(self.board_history) <= 2:
