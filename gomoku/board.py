@@ -202,8 +202,10 @@ class Board:
             "\n".join(map(lambda cell: player_repr[cell], row) for row in self.cells),
         )
 
-    def can_place_c4(self, x) -> bool:
-        return x.in_range(self.cells.shape) and self.cells[x] == 0
+    def can_place_c4(self, x: int) -> bool:
+        print(x)
+        print(self.cells[(x, 0)])
+        return self.cells[(x, 0)] == 0
 
     def can_place(self, pos: Coord) -> bool:
         return pos.in_range(self.cells.shape) and self.cells[pos] == 0

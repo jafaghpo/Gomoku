@@ -189,7 +189,7 @@ class Display:
         self.g_y = 1200 / 7
         for y in range(6):
             for x in range(7):
-                stone = pygame.image.load(f"{TEXT_PATH}/tmp.png")
+                stone = pygame.image.load(f"{TEXT_PATH}/c4_hole.png")
                 stone = pygame.transform.scale(stone, (self.g_y, self.g_y))
                 self.screen.blit(
                     stone,
@@ -279,10 +279,10 @@ class Display:
         if self.args.connect4:
             pos = pygame.mouse.get_pos()
             print(pos)
-            x = pos[0] - self.g_x / 2 // self.g_x
-            print(x)
-            if self.board.can_place_c4(x):
-                return pos
+            print(self.g_x, self.g_y)
+            x = (pos[0] - self.g_x / 2) // self.g_x
+            if self.board.can_place_c4(int(x)):
+                return x
         else:
             pos = pygame.mouse.get_pos()
             x, y = ((p - PADDING // 2) // CELL_SIZE for p in pos)
