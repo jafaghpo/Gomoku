@@ -160,8 +160,7 @@ class Display:
         self.screen_size = BASE_SIZE + (args.size - 1) * CELL_SIZE
         if self.args.connect4:
             print("wsh")
-            self.player1_type = "human"
-            self.player2_type = "human"
+            self.args.players = ["human", "human"]
             self.background = pygame.image.load(f"{TEXT_PATH}/connect4_background.png")
             self.screen = pygame.display.set_mode((1920, 1200))
             pygame.display.set_caption("Connect4")
@@ -280,9 +279,9 @@ class Display:
             pos = pygame.mouse.get_pos()
             print(pos)
             print(self.g_x, self.g_y)
-            x = (pos[0] - self.g_x / 2) // self.g_x
-            if self.board.can_place_c4(int(x)):
-                return x
+            x = int((pos[0] - self.g_x / 2) // self.g_x)
+            if self.board.can_place_c4(x):
+                return self.board.get_pos_c4(x)
         else:
             pos = pygame.mouse.get_pos()
             x, y = ((p - PADDING // 2) // CELL_SIZE for p in pos)
@@ -332,6 +331,7 @@ class Display:
             self.render_last_move(self.board.last_move)
         self.update()
         player_type = self.args.players
+        print(player_type)
         while True:
             time.sleep(0.01)
             pos = self.handle_event()

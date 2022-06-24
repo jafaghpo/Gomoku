@@ -202,6 +202,12 @@ class Board:
             "\n".join(map(lambda cell: player_repr[cell], row) for row in self.cells),
         )
 
+    def get_pos_c4(self, x: int):
+        for y in range(5, -1, -1):
+            if self.cells[y, x] == 0:
+                print(x, y)
+                return Coord(y, x)
+
     def can_place_c4(self, x: int) -> bool:
         print(x)
         print(self.cells[(x, 0)])
