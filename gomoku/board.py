@@ -3,6 +3,8 @@ import numpy as np
 from enum import IntEnum
 from collections import namedtuple
 
+MAX_SEQUENCE_STONES = 5
+
 
 class Block(IntEnum):
     NO = 0
@@ -10,18 +12,8 @@ class Block(IntEnum):
     TAIL = 2
     BOTH = 3
 
-    def __str__(self):
-        match self:
-            case Block.NO:
-                return "None"
-            case Block.HEAD:
-                return "Head"
-            case Block.TAIL:
-                return "Tail"
-            case Block.BOTH:
-                return "Both"
 
-
+# UNUSED
 class SeqType(IntEnum):
     # Five in a row.
     # o o o o o
@@ -29,7 +21,7 @@ class SeqType(IntEnum):
     # Four in a row with open ends.
     # - o o o o -
     STRAIGHT_FOUR = 4
-    # Four pieces in a line of 5 squares.
+    # Four pieces in a line of 5 cells.
     # x o o o o -
     # x o o o - o
     # o o - o o x
@@ -37,7 +29,7 @@ class SeqType(IntEnum):
     # Three pieces in a row.
     # - o o o -
     THREE = 2
-    # Three pieces in a line of 5 squares that aren't in a row.
+    # Three pieces in a line of 5 cells that aren't in a row.
     # - o o - o -
     # - o - o o -
     BROKEN_THREE = 1
@@ -55,6 +47,12 @@ class Coord(namedtuple("Coord", "y x")):
     def __sub__(self, other) -> "Coord":
         return Coord(self.y - other[0], self.x - other[1])
 
+    def __mul__(self, a):
+        return Coord(self.y * a, self.x * a)
+
+    def __rmul__(self, a):
+        return self.__mul__(a)
+
     def __eq__(self, other) -> bool:
         return self.y == other.y and self.x == other.x
 
@@ -69,6 +67,18 @@ class Coord(namedtuple("Coord", "y x")):
 
     def __neg__(self):
         return Coord(-self.y, -self.x)
+
+    def range(self, direction, len, step=1):
+        for i in range(0, len, step):
+            yield self + direction * i
+
+    def range2d(self, direction, shape, step2d=1, step1d=1):
+        current = self
+        for len in shape:
+            for coord in current.range(direction, len, step1d):
+                current = coord
+                yield coord
+            current += direction * (step2d + 1)
 
     def in_range(self, r) -> bool:
         match r:
@@ -136,31 +146,83 @@ class Sequence:
     shape: list[int]
     start: Coord
     direction: Coord
+    spaces: tuple[int]
     block: Block = Block.NO
-    capacity: int = 0
     id: int = -1
 
     @property
+    def stones(self) -> int:
+        return sum(self.shape)
+
+    @property
     def length(self) -> int:
-        return sum(self.shape) + len(self.shape) - 1
+        return self.stones + len(self.shape) - 1
+
+    @property
+    def capacity(self) -> int:
+        return self.length + sum(self.spaces)
 
     @property
     def end(self) -> Coord:
         return self.start + (self.length - 1) * self.direction
 
+    @property
+    def holes(self) -> tuple[Coord]:
+        if len(self.shape) == 1:
+            return ()
+        holes = []
+        acc = self.start
+        for subseq_len in self.shape[:-1]:
+            acc += self.direction * subseq_len
+            holes.append(acc)
+            acc += self.direction
+        return tuple(holes)
+
+    @property
+    def growth_cells(self) -> tuple[Coord]:
+        head = tuple(
+            self.start + (i + 1) * -self.direction for i in range(self.spaces[0])
+        )
+        tail = tuple(self.end + (i + 1) * self.direction for i in range(self.spaces[1]))
+        return head + tail
+
+    @property
+    def rest_cells(self) -> tuple[Coord]:
+        return self.start.range2d(self.direction, self.shape)
+
+    @property
+    def cost_cells(self) -> tuple[Coord]:
+        cells = self.holes
+        if self.block == Block.NO:
+            if self.stones >= MAX_SEQUENCE_STONES - 1:
+                return cells
+            else:
+                return cells + (self.start - self.direction, self.end + self.direction)
+        elif self.block == Block.HEAD:
+            return cells + (self.end + self.direction,)
+        elif self.block == Block.TAIL:
+            return cells + (self.start - self.direction,)
+        else:
+            return ()
+
     def __str__(self):
-        s = f"Sequence {self.id} (player{self.player}):\n"
+        s = f"Sequence {self.id} (p{self.player}):\n"
+        s += f"  stone count: {self.stones}\n"
+        s += f"  length (including spaces): {self.length}\n"
         s += f"  shape: {self.shape}\n"
         s += f"  start: {self.start}\n"
         s += f"  direction: {DIR_STR[self.direction]}\n"
-        s += f"  block: {self.block}\n"
-        s += f"  capacity: {self.capacity}\n"
+        s += f"  spaces: {self.spaces}\n"
+        s += f"  block: {self.block.name}\n"
+        s += f"  rest cells: {', '.join(map(str, self.rest_cells))}\n"
+        s += f"  cost cells: {', '.join(map(str, self.cost_cells))}\n"
+        s += f"  growth cells: {', '.join(map(str, self.growth_cells))}"
         return s
 
     def __repr__(self):
         s = f"Sequence(player={self.player}, shape={self.shape}, start={self.start}, "
         s += f"direction={DIR_STR[self.direction]}, block={self.block}, id={self.id}, "
-        s += f"capacity={self.capacity})"
+        s += f"spaces={self.spaces})"
         return s
 
     def __add__(self, other):
@@ -170,9 +232,28 @@ class Sequence:
         self.shape[0] += other.shape[0] - 1
         self.shape = self.shape[::-1] + other.shape[1:]
         self.direction = other.direction
-        self.block += other.block
-        self.capacity += other.capacity - 1
+        self.block = Block(self.block + other.block)
+        self.spaces = tuple(map(sum, zip(self.spaces, other.spaces)))
         return self
+
+    # UNUSED
+    def get_block_pos(self, block: Block) -> tuple[Coord]:
+        if block == Block.NO:
+            return ()
+        elif block == Block.HEAD:
+            return (self.start - self.direction,)
+        elif block == Block.TAIL:
+            return (self.end + self.direction,)
+        else:
+            return (self.start - self.direction, self.end + self.direction)
+
+
+# UNUSED
+class Cells(IntEnum):
+    GROWTH = 0  # Empty Cells that can grow a sequence
+    REST = 1  # Cells that are part of a sequence
+    COST = 2  # Empty Cells that counter the growth of a sequence
+    BLOCK = 3  # Cells filled by enemy pieces that block a sequence
 
 
 @dataclass(init=False, repr=True, slots=True)
@@ -182,7 +263,7 @@ class Board:
     """
 
     cells: np.ndarray
-    seq_map: dict[Coord, list[int]]
+    seq_map: dict[Coord, list[(Cells, int)]]
     seq_list: dict[int, Sequence]
     last_seq_id: int
     last_move: Coord | None
@@ -239,7 +320,10 @@ class Board:
         start = current
         current += dir
         block = Block.NO
-        capacity = sub_len = 1
+        sub_len = 1
+        spaces = [0, 0]
+        block_dir = dir.get_block()
+        idx = 0 if block_dir == Block.HEAD else 1
         empty = False
         while current.in_range(self.cells.shape):
             match (self.cells[current], empty):
@@ -249,28 +333,30 @@ class Board:
                         and self.cells[current] != player ^ 3
                     ):
                         current += dir
-                        capacity += 1
-                    return Sequence(player, shape, start, dir, block, capacity)
+                        spaces[idx] += 1
+                    return Sequence(player, shape, start, dir, tuple(spaces), block)
                 case (0, False):
                     empty = True
+                    spaces[idx] += 1
                     if sub_len != 0:
                         shape.append(sub_len)
                         sub_len = 0
                 case (p, _) if p == player:
+                    spaces[idx] = 0
                     sub_len += 1
                     start = current
                     empty = False
                 case (p, _) if p != player:
+                    spaces[idx] = 0
                     if sub_len != 0:
                         shape.append(sub_len)
-                    block = dir.get_block()
-                    return Sequence(player, shape, start, dir, block, capacity)
-            capacity += 1
+                    block = block_dir
+                    return Sequence(player, shape, start, dir, tuple(spaces), block)
             current += dir
-        block = dir.get_block()
+        block = block_dir
         if sub_len != 0:
             shape.append(sub_len)
-        return Sequence(player, shape, start, dir, block, capacity)
+        return Sequence(player, shape, start, dir, tuple(spaces), block)
 
     def search_sequences(self, pos: Coord, player: int) -> list[Sequence]:
         sequences = []
@@ -285,7 +371,9 @@ class Board:
         return sequences
 
 
-# Shape possibilities:
-# Seq len 2: (2), (1, 1)
-# Seq len 3: (3), (2, 1), (1, 2), (1, 1, 1)
-# Seq len 4: (4), (3, 1), (2, 2), (1, 3)
+# TODO:
+# - Store generated sequences in seq_map & seq_list
+# - Divide too large sequences:
+#   extract the biggest sub sequence inferior to the max sequence length and repeat with
+#   the rest of the sequence until you have a sequence inferior to max seq len
+# - Use cache for the Sequence properties that take non-negligeable time when repeated.
