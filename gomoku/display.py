@@ -161,6 +161,7 @@ class Display:
         if self.args.connect4:
             print("wsh")
             self.args.players = ["human", "human"]
+            self.args.size = 7
             self.background = pygame.image.load(f"{TEXT_PATH}/connect4_background.png")
             self.screen = pygame.display.set_mode((1920, 1200))
             pygame.display.set_caption("Connect4")
@@ -279,7 +280,8 @@ class Display:
             pos = pygame.mouse.get_pos()
             print(pos)
             print(self.g_x, self.g_y)
-            x = int((pos[0] - self.g_x / 2) // self.g_x)
+            print((pos[0] - (self.g_x / 2) // 2) // self.g_x)
+            x = int((pos[0] - (self.g_x / 2) // 2) // self.g_x)
             if self.board.can_place_c4(x):
                 return self.board.get_pos_c4(x)
         else:
