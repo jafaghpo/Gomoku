@@ -165,15 +165,18 @@ class Display:
             self.background = pygame.image.load(f"{TEXT_PATH}/connect4_background.png")
             self.screen = pygame.display.set_mode((1920, 1200))
             pygame.display.set_caption("Connect4")
+            self.stone_text = (
+                f"{TEXT_PATH}/c4_red.png",
+                f"{TEXT_PATH}/c4_yellow.png",
+            )
         else:
             self.background = pygame.image.load(f"{TEXT_PATH}/classic_background.png")
             self.screen = pygame.display.set_mode((self.screen_size, self.screen_size))
             pygame.display.set_caption("Gomoku")
-
-        self.stone_text = (
-            f"{TEXT_PATH}/classic_black_stone.png",
-            f"{TEXT_PATH}/classic_white_stone.png",
-        )
+            self.stone_text = (
+                f"{TEXT_PATH}/classic_black_stone.png",
+                f"{TEXT_PATH}/classic_white_stone.png",
+            )
 
         self.board = None
         self.board_history = []
