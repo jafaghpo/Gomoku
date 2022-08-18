@@ -91,7 +91,7 @@ class Coord(namedtuple("Coord", "y x")):
             case _:
                 return False
 
-    def get_block(self) -> Block:
+    def get_is_blocked(self) -> Block:
         if self.y == -1 or (self.y == 0 and self.x == -1):
             return Block.HEAD
         else:
@@ -147,7 +147,7 @@ class Sequence:
     start: Coord
     direction: Coord
     spaces: tuple[int]
-    block: Block = Block.NO
+    is_blocked: Block = Block.NO
     id: int = -1
 
     @property
@@ -165,6 +165,17 @@ class Sequence:
     @property
     def end(self) -> Coord:
         return self.start + (self.length - 1) * self.direction
+
+    @property
+    def blocks(self) -> tuple[Coord]:
+        if self.is_blocked == Block.NO:
+            return ()
+        elif self.is_blocked == Block.HEAD:
+            return (self.start - self.direction,)
+        elif self.is_blocked == Block.TAIL:
+            return (self.end + self.direction,)
+        else:
+            return (self.start - self.direction, self.end + self.direction)
 
     @property
     def holes(self) -> tuple[Coord]:
@@ -193,14 +204,14 @@ class Sequence:
     @property
     def cost_cells(self) -> tuple[Coord]:
         cells = self.holes
-        if self.block == Block.NO:
+        if self.is_blocked == Block.NO:
             if self.stones >= MAX_SEQUENCE_STONES - 1:
                 return cells
             else:
                 return cells + (self.start - self.direction, self.end + self.direction)
-        elif self.block == Block.HEAD:
+        elif self.is_blocked == Block.HEAD:
             return cells + (self.end + self.direction,)
-        elif self.block == Block.TAIL:
+        elif self.is_blocked == Block.TAIL:
             return cells + (self.start - self.direction,)
         else:
             return ()
@@ -213,7 +224,7 @@ class Sequence:
         s += f"  start: {self.start}\n"
         s += f"  direction: {DIR_STR[self.direction]}\n"
         s += f"  spaces: {self.spaces}\n"
-        s += f"  block: {self.block.name}\n"
+        s += f"  is_blocked: {self.is_blocked.name}\n"
         s += f"  rest cells: {', '.join(map(str, self.rest_cells))}\n"
         s += f"  cost cells: {', '.join(map(str, self.cost_cells))}\n"
         s += f"  growth cells: {', '.join(map(str, self.growth_cells))}"
@@ -221,39 +232,32 @@ class Sequence:
 
     def __repr__(self):
         s = f"Sequence(player={self.player}, shape={self.shape}, start={self.start}, "
-        s += f"direction={DIR_STR[self.direction]}, block={self.block}, id={self.id}, "
+        s += f"direction={DIR_STR[self.direction]}, is_blocked={self.is_blocked}, id={self.id}, "
         s += f"spaces={self.spaces})"
         return s
 
     def __add__(self, other):
         self, other = (
-            (self, other) if self.direction.get_block() == Block.HEAD else (other, self)
+            (self, other)
+            if self.direction.get_is_blocked() == Block.HEAD
+            else (other, self)
         )
         self.shape[0] += other.shape[0] - 1
         self.shape = self.shape[::-1] + other.shape[1:]
         self.direction = other.direction
-        self.block = Block(self.block + other.block)
+        self.is_blocked = Block(self.is_blocked + other.is_blocked)
         self.spaces = tuple(map(sum, zip(self.spaces, other.spaces)))
         return self
 
-    # UNUSED
-    def get_block_pos(self, block: Block) -> tuple[Coord]:
-        if block == Block.NO:
-            return ()
-        elif block == Block.HEAD:
-            return (self.start - self.direction,)
-        elif block == Block.TAIL:
-            return (self.end + self.direction,)
-        else:
-            return (self.start - self.direction, self.end + self.direction)
 
-
-# UNUSED
 class Cells(IntEnum):
     GROWTH = 0  # Empty Cells that can grow a sequence
     REST = 1  # Cells that are part of a sequence
     COST = 2  # Empty Cells that counter the growth of a sequence
-    BLOCK = 3  # Cells filled by enemy pieces that block a sequence
+    BLOCK = 3  # Cells filled by enemy pieces that is_blocked a sequence
+
+    def __repr__(self):
+        return self.name.lower()
 
 
 @dataclass(init=False, repr=True, slots=True)
@@ -297,15 +301,42 @@ class Board:
     def can_place(self, pos: Coord) -> bool:
         return pos.in_range(self.cells.shape) and self.cells[pos] == 0
 
+    def map_sequence(self, seq: Sequence) -> None:
+        for cell in seq.rest_cells:
+            self.seq_map.setdefault(cell, []).append((Cells.REST, seq.id))
+        for cell in seq.cost_cells:
+            self.seq_map.setdefault(cell, []).append((Cells.COST, seq.id))
+        for cell in seq.growth_cells:
+            self.seq_map.setdefault(cell, []).append((Cells.GROWTH, seq.id))
+        for cell in seq.blocks:
+            self.seq_map.setdefault(cell, []).append((Cells.BLOCK, seq.id))
+
+    def update_sequence(self, seq: Sequence) -> None:
+        pass
+
     def add_move(self, pos: Coord, player: int) -> None:
         self.cells[pos] = player
         self.stones.add(pos)
         self.last_move = pos
         print(f"Adding move {pos}")
-        seq_list = self.search_sequences(pos, player)
-        print("Sequences found:")
-        for seq in seq_list:
-            print(seq)
+        if not pos in self.seq_map or not self.seq_map[pos]:
+            seq_list = self.search_sequences(pos, player)
+            print("Sequences found:")
+            for seq in seq_list:
+                self.map_sequence(seq)
+                print(seq)
+        else:
+            for cell, seq_id in self.seq_map[pos]:
+                seq = self.seq_list[seq_id]
+                if seq.player == player:
+                    seq.add_move(pos)
+                    self.update_sequence(seq)
+                    self.map_sequence(seq)
+                    print(seq)
+
+        print("\nSequence map:")
+        for cell, seq_list in self.seq_map.items():
+            print(cell, seq_list)
 
     def get_neighbors(self) -> set[Coord]:
         children = set()
@@ -319,11 +350,11 @@ class Board:
         shape = []
         start = current
         current += dir
-        block = Block.NO
+        is_blocked = Block.NO
         sub_len = 1
         spaces = [0, 0]
-        block_dir = dir.get_block()
-        idx = 0 if block_dir == Block.HEAD else 1
+        is_blocked_dir = dir.get_is_blocked()
+        idx = 0 if is_blocked_dir == Block.HEAD else 1
         empty = False
         while current.in_range(self.cells.shape):
             match (self.cells[current], empty):
@@ -334,7 +365,9 @@ class Board:
                     ):
                         current += dir
                         spaces[idx] += 1
-                    return Sequence(player, shape, start, dir, tuple(spaces), block)
+                    return Sequence(
+                        player, shape, start, dir, tuple(spaces), is_blocked
+                    )
                 case (0, False):
                     empty = True
                     spaces[idx] += 1
@@ -350,13 +383,15 @@ class Board:
                     spaces[idx] = 0
                     if sub_len != 0:
                         shape.append(sub_len)
-                    block = block_dir
-                    return Sequence(player, shape, start, dir, tuple(spaces), block)
+                    is_blocked = is_blocked_dir
+                    return Sequence(
+                        player, shape, start, dir, tuple(spaces), is_blocked
+                    )
             current += dir
-        block = block_dir
+        is_blocked = is_blocked_dir
         if sub_len != 0:
             shape.append(sub_len)
-        return Sequence(player, shape, start, dir, tuple(spaces), block)
+        return Sequence(player, shape, start, dir, tuple(spaces), is_blocked)
 
     def search_sequences(self, pos: Coord, player: int) -> list[Sequence]:
         sequences = []
