@@ -192,9 +192,9 @@ class Sequence:
     @property
     def growth_cells(self) -> tuple[Coord]:
         head = tuple(
-            self.start + (i + 1) * -self.direction for i in range(self.spaces[0])
+            self.start + (i + 1) * -self.direction for i in range(min(self.spaces[0], MAX_SEQ_LEN - self.length))
         )
-        tail = tuple(self.end + (i + 1) * self.direction for i in range(self.spaces[1]))
+        tail = tuple(self.end + (i + 1) * self.direction for i in range(min(self.spaces[1], MAX_SEQ_LEN - self.length)))
         return head + tail
 
     @property
@@ -205,10 +205,7 @@ class Sequence:
     def cost_cells(self) -> tuple[Coord]:
         cells = self.holes
         if self.is_blocked == Block.NO:
-            if self.stones >= MAX_SEQ_LEN - 1:
-                return cells
-            else:
-                return cells + (self.start - self.direction, self.end + self.direction)
+            return cells + (self.start - self.direction, self.end + self.direction)
         elif self.is_blocked == Block.HEAD:
             return cells + (self.end + self.direction,)
         elif self.is_blocked == Block.TAIL:
@@ -225,9 +222,10 @@ class Sequence:
         s += f"  direction: {DIR_STR[self.direction]}\n"
         s += f"  spaces: {self.spaces}\n"
         s += f"  is_blocked: {self.is_blocked.name}\n"
+        s += f"  blocks: {', '.join(map(str, self.blocks))}\n"
         s += f"  rest cells: {', '.join(map(str, self.rest_cells))}\n"
         s += f"  cost cells: {', '.join(map(str, self.cost_cells))}\n"
-        s += f"  growth cells: {', '.join(map(str, self.growth_cells))}"
+        s += f"  growth cells: {', '.join(map(str, self.growth_cells))}\n"
         return s
 
     def __repr__(self):
@@ -356,8 +354,8 @@ class Board:
         is_blocked = Block.NO
         sub_len = 1
         spaces = [0, 0]
-        is_blocked_dir = dir.get_is_blocked()
-        idx = 0 if is_blocked_dir == Block.HEAD else 1
+        block_dir = dir.get_is_blocked()
+        idx = 0 if block_dir == Block.HEAD else 1
         empty = False
         while current.in_range(self.cells.shape):
             match (self.cells[current], empty):
@@ -382,16 +380,24 @@ class Board:
                     sub_len += 1
                     start = current
                     empty = False
-                case (p, _) if p != player:
+                case (p, False) if p != player:
                     spaces[idx] = 0
                     if sub_len != 0:
                         shape.append(sub_len)
-                    is_blocked = is_blocked_dir
+                    is_blocked = block_dir
+                    return Sequence(
+                        player, shape, start, dir, tuple(spaces), is_blocked
+                    )
+                case (p, True) if p != player:
+                    spaces[idx] = 1
+                    if sub_len != 0:
+                        shape.append(sub_len)
                     return Sequence(
                         player, shape, start, dir, tuple(spaces), is_blocked
                     )
             current += dir
-        is_blocked = is_blocked_dir
+        if not empty:
+            is_blocked = block_dir
         if sub_len != 0:
             shape.append(sub_len)
         return Sequence(player, shape, start, dir, tuple(spaces), is_blocked)
