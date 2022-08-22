@@ -3,7 +3,7 @@ import numpy as np
 from enum import IntEnum
 from collections import namedtuple
 
-MAX_SEQUENCE_STONES = 5
+MAX_SEQ_LEN = 5
 
 
 class Block(IntEnum):
@@ -205,7 +205,7 @@ class Sequence:
     def cost_cells(self) -> tuple[Coord]:
         cells = self.holes
         if self.is_blocked == Block.NO:
-            if self.stones >= MAX_SEQUENCE_STONES - 1:
+            if self.stones >= MAX_SEQ_LEN - 1:
                 return cells
             else:
                 return cells + (self.start - self.direction, self.end + self.direction)
@@ -318,25 +318,28 @@ class Board:
         self.cells[pos] = player
         self.stones.add(pos)
         self.last_move = pos
-        print(f"Adding move {pos}")
-        if not pos in self.seq_map or not self.seq_map[pos]:
-            seq_list = self.search_sequences(pos, player)
-            print("Sequences found:")
-            for seq in seq_list:
-                self.map_sequence(seq)
-                print(seq)
-        else:
-            for cell, seq_id in self.seq_map[pos]:
-                seq = self.seq_list[seq_id]
-                if seq.player == player:
-                    seq.add_move(pos)
-                    self.update_sequence(seq)
-                    self.map_sequence(seq)
-                    print(seq)
+        print(f"\nAdding move {pos}")
+        # if not pos in self.seq_map or not self.seq_map[pos]:
+        #     seq_list = self.search_sequences(pos, player)
+        #     print("Sequences found:")
+        #     for seq in seq_list:
+        #         self.map_sequence(seq)
+        #         print(seq)
+        # else:
+        #     for cell, seq_id in self.seq_map[pos]:
+        #         seq = self.seq_list[seq_id]
+        #         if seq.player == player:
+        #             seq.add_move(pos)
+        #             self.update_sequence(seq)
+        #             self.map_sequence(seq)
+        #             print(seq)
 
-        print("\nSequence map:")
-        for cell, seq_list in self.seq_map.items():
-            print(cell, seq_list)
+        # print("\nSequence map:")
+        # for cell, seq_list in self.seq_map.items():
+        #     print(cell, seq_list)
+        seq_list = self.search_sequences(pos, player)
+        for seq in seq_list:
+            print(seq)
 
     def get_neighbors(self) -> set[Coord]:
         children = set()
