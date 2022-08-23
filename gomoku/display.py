@@ -1,4 +1,5 @@
 from tkinter.tix import CELL
+from tracemalloc import start
 import pygame
 import pygame_menu
 import numpy as np
@@ -337,6 +338,7 @@ class Display:
         self.update()
         player_type = self.args.players
         print(player_type)
+        total_time = 0
         while True:
             time.sleep(0.01)
             pos = self.handle_event()
@@ -346,15 +348,30 @@ class Display:
                 if not pos:
                     continue
             else:
+                start_time = time.time()
                 pos = dumb_algo(self.board)
+                end_time = time.time()
+                total_time = end_time - start_time
+                print(f"time played:{total_time:.4f}")
                 if not pos:
                     self.game_over = True
                     continue
+            # if total_time > 0:
+            #    font = pygame.font.SysFont(None, 24)
+            #    img = font.render(f"{total_time:.4f}", True, (0, 0, 0))
+            #    self.screen.blit(img, (20, 20))
+            #    self.render_background()
+            #    self.render_board()
             self.board_history.append(deepcopy(self.board))
+            self.render_all_cells()
             self.render_cell(pos, self.player_turn)
             self.render_last_move(pos)
             self.update()
             self.board.add_move(pos, self.player_turn + 1)
+            # if self.board.check_win(pos, self.player_turn, self.args.connect4):
+            #    print(f"player: {self.player_turn} won the game.")
+            #    sys.exit(pygame.quit())
+
             self.player_turn ^= 1
 
 
