@@ -2,6 +2,7 @@ from dataclasses import dataclass
 import numpy as np
 from enum import IntEnum
 from collections import namedtuple
+from copy import deepcopy
 
 MAX_SEQ_LEN = 5
 
@@ -91,7 +92,7 @@ class Coord(namedtuple("Coord", "y x")):
             case _:
                 return False
 
-    def get_is_blocked(self) -> Block:
+    def get_block_dir(self) -> Block:
         if self.y == -1 or (self.y == 0 and self.x == -1):
             return Block.HEAD
         else:
@@ -192,9 +193,11 @@ class Sequence:
     @property
     def growth_cells(self) -> tuple[Coord]:
         head = tuple(
-            self.start + (i + 1) * -self.direction for i in range(self.spaces[0])
+            self.start + (i + 1) * -self.direction
+                for i in range(1, min(self.spaces[0], MAX_SEQ_LEN - self.length))
         )
-        tail = tuple(self.end + (i + 1) * self.direction for i in range(self.spaces[1]))
+        tail = tuple(self.end + (i + 1) * self.direction
+            for i in range(1, min(self.spaces[1], MAX_SEQ_LEN - self.length)))
         return head + tail
 
     @property
@@ -205,10 +208,7 @@ class Sequence:
     def cost_cells(self) -> tuple[Coord]:
         cells = self.holes
         if self.is_blocked == Block.NO:
-            if self.stones >= MAX_SEQ_LEN - 1:
-                return cells
-            else:
-                return cells + (self.start - self.direction, self.end + self.direction)
+            return cells + (self.start - self.direction, self.end + self.direction)
         elif self.is_blocked == Block.HEAD:
             return cells + (self.end + self.direction,)
         elif self.is_blocked == Block.TAIL:
@@ -225,9 +225,10 @@ class Sequence:
         s += f"  direction: {DIR_STR[self.direction]}\n"
         s += f"  spaces: {self.spaces}\n"
         s += f"  is_blocked: {self.is_blocked.name}\n"
+        s += f"  blocks: {', '.join(map(str, self.blocks))}\n"
         s += f"  rest cells: {', '.join(map(str, self.rest_cells))}\n"
         s += f"  cost cells: {', '.join(map(str, self.cost_cells))}\n"
-        s += f"  growth cells: {', '.join(map(str, self.growth_cells))}"
+        s += f"  growth cells: {', '.join(map(str, self.growth_cells))}\n"
         return s
 
     def __repr__(self):
@@ -239,7 +240,7 @@ class Sequence:
     def __add__(self, other):
         self, other = (
             (self, other)
-            if self.direction.get_is_blocked() == Block.HEAD
+            if self.direction.get_block_dir() == Block.HEAD
             else (other, self)
         )
         self.shape[0] += other.shape[0] - 1
@@ -319,27 +320,31 @@ class Board:
         self.stones.add(pos)
         self.last_move = pos
         print(f"\nAdding move {pos}")
-        # if not pos in self.seq_map or not self.seq_map[pos]:
-        #     seq_list = self.search_sequences(pos, player)
-        #     print("Sequences found:")
-        #     for seq in seq_list:
-        #         self.map_sequence(seq)
-        #         print(seq)
-        # else:
-        #     for cell, seq_id in self.seq_map[pos]:
-        #         seq = self.seq_list[seq_id]
-        #         if seq.player == player:
-        #             seq.add_move(pos)
-        #             self.update_sequence(seq)
-        #             self.map_sequence(seq)
-        #             print(seq)
+        if not pos in self.seq_map or not self.seq_map[pos]:
+            seq_list = self.search_sequences(pos, player)
+            print("Sequences found:")
+            for seq in seq_list:
+                self.map_sequence(seq)
+                self.seq_list[seq.id] = seq
+                print(seq)
+        else:
+            print(len(self.seq_map[pos]))
+            cells = deepcopy(self.seq_map[pos])
+            for cell, seq_id in cells:
+                seq = self.seq_list[seq_id]
+                if seq.player == player:
+                    updated_seq = self.get_sequence(pos, seq.direction, player)
+                    updated_seq.id = seq.id
+                    self.seq_list[seq.id] = updated_seq
+                    self.map_sequence(updated_seq)
 
-        # print("\nSequence map:")
-        # for cell, seq_list in self.seq_map.items():
-        #     print(cell, seq_list)
-        seq_list = self.search_sequences(pos, player)
-        for seq in seq_list:
-            print(seq)
+        print("\nSequence map:")
+        for cell, seq_list in self.seq_map.items():
+            print(cell, seq_list)
+        # seq_list = self.search_sequences(pos, player)
+        # for seq in seq_list:
+        #     print(seq)
+        #     pass
 
     def get_neighbors(self) -> set[Coord]:
         children = set()
@@ -356,8 +361,8 @@ class Board:
         is_blocked = Block.NO
         sub_len = 1
         spaces = [0, 0]
-        is_blocked_dir = dir.get_is_blocked()
-        idx = 0 if is_blocked_dir == Block.HEAD else 1
+        block_dir = dir.get_block_dir()
+        idx = 0 if block_dir == Block.HEAD else 1
         empty = False
         while current.in_range(self.cells.shape):
             match (self.cells[current], empty):
@@ -382,26 +387,37 @@ class Board:
                     sub_len += 1
                     start = current
                     empty = False
-                case (p, _) if p != player:
+                case (p, False) if p != player:
                     spaces[idx] = 0
                     if sub_len != 0:
                         shape.append(sub_len)
-                    is_blocked = is_blocked_dir
+                    is_blocked = block_dir
+                    return Sequence(
+                        player, shape, start, dir, tuple(spaces), is_blocked
+                    )
+                case (p, True) if p != player:
+                    spaces[idx] = 1
+                    if sub_len != 0:
+                        shape.append(sub_len)
                     return Sequence(
                         player, shape, start, dir, tuple(spaces), is_blocked
                     )
             current += dir
-        is_blocked = is_blocked_dir
+        if not empty:
+            is_blocked = block_dir
         if sub_len != 0:
             shape.append(sub_len)
         return Sequence(player, shape, start, dir, tuple(spaces), is_blocked)
+    
+    def get_sequence(self, current: Coord, dir: Coord, player: int) -> Sequence:
+        head_seq = self.half_sequence(current, dir, player)
+        tail_seq = self.half_sequence(current, -dir, player)
+        return head_seq + tail_seq
 
     def search_sequences(self, pos: Coord, player: int) -> list[Sequence]:
         sequences = []
         for dir in DIRECTIONS:
-            head_seq = self.half_sequence(pos, dir, player)
-            tail_seq = self.half_sequence(pos, -dir, player)
-            sequence = head_seq + tail_seq
+            sequence = self.get_sequence(pos, dir, player)
             if sequence.length >= 2:
                 sequence.id = self.last_seq_id
                 self.last_seq_id += 1
