@@ -2,7 +2,6 @@ from dataclasses import dataclass
 import numpy as np
 from enum import IntEnum
 from collections import namedtuple
-from copy import deepcopy
 
 MAX_SEQ_LEN = 5
 
@@ -12,28 +11,6 @@ class Block(IntEnum):
     HEAD = 1
     TAIL = 2
     BOTH = 3
-
-
-# UNUSED
-class SeqType(IntEnum):
-    # Five in a row.
-    # o o o o o
-    FIVE = 5
-    # Four in a row with open ends.
-    # - o o o o -
-    STRAIGHT_FOUR = 4
-    # Four pieces in a line of 5 cells.
-    # x o o o o -
-    # x o o o - o
-    # o o - o o x
-    FOUR = 3
-    # Three pieces in a row.
-    # - o o o -
-    THREE = 2
-    # Three pieces in a line of 5 cells that aren't in a row.
-    # - o o - o -
-    # - o - o o -
-    BROKEN_THREE = 1
 
 
 class Coord(namedtuple("Coord", "y x")):
@@ -251,16 +228,6 @@ class Sequence:
         return self
 
 
-class Cells(IntEnum):
-    GROWTH = 0  # Empty Cells that can grow a sequence
-    REST = 1  # Cells that are part of a sequence
-    COST = 2  # Empty Cells that counter the growth of a sequence
-    BLOCK = 3  # Cells filled by enemy pieces that is_blocked a sequence
-
-    def __repr__(self):
-        return self.name.lower()
-
-
 @dataclass(init=False, repr=True, slots=True)
 class Board:
     """
@@ -268,7 +235,7 @@ class Board:
     """
 
     cells: np.ndarray
-    seq_map: dict[Coord, list[(Cells, int)]]
+    seq_map: dict[Coord, set[int]]
     seq_list: dict[int, Sequence]
     last_seq_id: int
     last_move: Coord | None
@@ -302,49 +269,82 @@ class Board:
     def can_place(self, pos: Coord) -> bool:
         return pos.in_range(self.cells.shape) and self.cells[pos] == 0
 
-    def map_sequence(self, seq: Sequence) -> None:
+    def map_sequence_add(self, seq: Sequence) -> None:
         for cell in seq.rest_cells:
-            self.seq_map.setdefault(cell, []).append((Cells.REST, seq.id))
+            self.seq_map.setdefault(cell, set()).add(seq.id)
         for cell in seq.cost_cells:
-            self.seq_map.setdefault(cell, []).append((Cells.COST, seq.id))
+            self.seq_map.setdefault(cell, set()).add(seq.id)
         for cell in seq.growth_cells:
-            self.seq_map.setdefault(cell, []).append((Cells.GROWTH, seq.id))
+            self.seq_map.setdefault(cell, set()).add(seq.id)
         for cell in seq.blocks:
-            self.seq_map.setdefault(cell, []).append((Cells.BLOCK, seq.id))
-
-    def update_sequence(self, seq: Sequence) -> None:
-        pass
+            if cell[0] >= 0 and cell[1] >= 0:
+                self.seq_map.setdefault(cell, set()).add(seq.id)
+    
+    def map_sequence_remove(self, seq: Sequence) -> None:
+        for cell in seq.rest_cells:
+            self.seq_map[cell].remove(seq.id)
+        for cell in seq.cost_cells:
+            self.seq_map[cell].remove(seq.id)
+        for cell in seq.growth_cells:
+            self.seq_map[cell].remove(seq.id)
+        for cell in seq.blocks:
+            if cell[0] >= 0 and cell[1] >= 0:
+                self.seq_map[cell].remove(seq.id)
 
     def add_move(self, pos: Coord, player: int) -> None:
         self.cells[pos] = player
         self.stones.add(pos)
         self.last_move = pos
         print(f"\nAdding move {pos}")
-        if not pos in self.seq_map or not self.seq_map[pos]:
-            seq_list = self.search_sequences(pos, player)
-            print("Sequences found:")
-            for seq in seq_list:
-                self.map_sequence(seq)
-                self.seq_list[seq.id] = seq
-                print(seq)
-        else:
-            print(len(self.seq_map[pos]))
-            cells = deepcopy(self.seq_map[pos])
-            for cell, seq_id in cells:
-                seq = self.seq_list[seq_id]
-                if seq.player == player:
-                    updated_seq = self.get_sequence(pos, seq.direction, player)
-                    updated_seq.id = seq.id
-                    self.seq_list[seq.id] = updated_seq
-                    self.map_sequence(updated_seq)
+        checked_dir = set()
+        to_remove = []
+        for seq_id in self.seq_map.get(pos, set()).copy():
+            seq = self.seq_list[seq_id]
+            checked_dir.add(seq.direction)
+            if seq.player == player or pos < seq.start - seq.direction or pos > seq.end + seq.direction:
+                updated_seq = self.get_sequence(pos, seq.direction, player)
+                updated_seq.id = seq.id
+                self.seq_list[seq.id] = updated_seq
+                self.map_sequence_add(updated_seq)
+            else:
+                if pos == seq.start - seq.direction:
+                    self.seq_list[seq.id].is_blocked = Block.HEAD
+                    self.seq_map[seq.start - seq.direction].add(seq.id)
+                elif pos == seq.end + seq.direction:
+                    self.seq_list[seq.id].is_blocked = Block.TAIL
+                    self.seq_map[seq.end + seq.direction].add(seq.id)
+                elif seq.start < pos < seq.end:
+                    seqs = tuple(filter(lambda s: s != None,
+                        (self.get_sequence(seq.start, seq.direction, seq.player),
+                        self.get_sequence(seq.end, seq.direction, seq.player))
+                        ))
+                    to_remove.append(seq)
+                    for s in seqs:
+                        s.id = self.last_seq_id
+                        self.last_seq_id += 1
+                        self.seq_list[s.id] = s
+                        self.map_sequence_add(s)
+            checked_dir.add(seq.direction)
+            checked_dir.add(-seq.direction)
+        for seq in to_remove:
+            self.seq_list.pop(seq.id)
+            self.map_sequence_remove(seq)
+        for dir in DIRECTIONS:
+            if dir in checked_dir:
+                continue
+            sequence = self.get_sequence(pos, dir, player)
+            if not sequence:
+                continue
+            sequence.id = self.last_seq_id
+            self.last_seq_id += 1
+            self.seq_list[sequence.id] = sequence
+            self.map_sequence_add(sequence)
 
         print("\nSequence map:")
         for cell, seq_list in self.seq_map.items():
-            print(cell, seq_list)
-        # seq_list = self.search_sequences(pos, player)
-        # for seq in seq_list:
-        #     print(seq)
-        #     pass
+            if seq_list:
+                print(f"{cell}: {seq_list}")
+        print(f"Last seq id: {self.last_seq_id}")
 
     def get_neighbors(self) -> set[Coord]:
         children = set()
@@ -409,25 +409,14 @@ class Board:
             shape.append(sub_len)
         return Sequence(player, shape, start, dir, tuple(spaces), is_blocked)
     
-    def get_sequence(self, current: Coord, dir: Coord, player: int) -> Sequence:
+    def get_sequence(self, current: Coord, dir: Coord, player: int) -> Sequence | None:
         head_seq = self.half_sequence(current, dir, player)
         tail_seq = self.half_sequence(current, -dir, player)
-        return head_seq + tail_seq
-
-    def search_sequences(self, pos: Coord, player: int) -> list[Sequence]:
-        sequences = []
-        for dir in DIRECTIONS:
-            sequence = self.get_sequence(pos, dir, player)
-            if sequence.length >= 2:
-                sequence.id = self.last_seq_id
-                self.last_seq_id += 1
-                sequences.append(sequence)
-        return sequences
+        sequence = head_seq + tail_seq
+        if sequence.length >= 2:
+            return sequence
+        return None
 
 
 # TODO:
-# - Store generated sequences in seq_map & seq_list
-# - Divide too large sequences:
-#   extract the biggest sub sequence inferior to the max sequence length and repeat with
-#   the rest of the sequence until you have a sequence inferior to max seq len
 # - Use cache for the Sequence properties that take non-negligeable time when repeated.

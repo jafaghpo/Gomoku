@@ -363,7 +363,7 @@ class Display:
             #    self.render_background()
             #    self.render_board()
             self.board_history.append(deepcopy(self.board))
-            self.render_all_cells()
+            # self.render_all_cells()
             self.render_cell(pos, self.player_turn)
             self.render_last_move(pos)
             self.update()
