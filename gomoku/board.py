@@ -13,6 +13,42 @@ class Block(IntEnum):
     BOTH = 3
 
 
+# UNUSED
+class SeqType(IntEnum):
+    # x o o o x
+    DEAD = 0
+    # x o - o - -
+    BLOCKED_HOLED_TWO = 300
+    # x o o - - -
+    BLOCKED_TWO = -1000 # negative value because it can be captured by opponent
+    # - o - o - -
+    HOLED_TWO = 1450
+    # - o o - - -
+    TWO = 1500
+    # x o - o - o
+    BLOCKED_DOUBLE_HOLED_THREE = 1550
+    # x o o - o -
+    BLOCKED_HOLED_THREE = 1650
+    # x o o o - -
+    BLOCKED_THREE = 1700
+    # o - o - o
+    DOBLE_HOLED_THREE = 1800
+    # - o o - o -
+    HOLED_THREE = 4900
+    # - o o o - -
+    THREE = 5000
+    # x o o - o o || x o o o - o
+    BLOCKED_HOLED_FOUR = 9000
+    # x o o o o -
+    BLOCKED_FOUR = 10000
+    # - o o - o o || - o o o - o
+    HOLED_FOUR = 10500
+    # - o o o o -
+    FOUR = 100000
+    # o o o o o
+    FIVE = 2e9
+
+
 class Coord(namedtuple("Coord", "y x")):
     __slots__ = ()
 
@@ -131,10 +167,14 @@ class Sequence:
     @property
     def stones(self) -> int:
         return sum(self.shape)
+    
+    @property
+    def nb_holes(self) -> int:
+        return len(self.shape) - 1
 
     @property
     def length(self) -> int:
-        return self.stones + len(self.shape) - 1
+        return self.stones + self.nb_holes
 
     @property
     def capacity(self) -> int:
@@ -157,7 +197,7 @@ class Sequence:
 
     @property
     def holes(self) -> tuple[Coord]:
-        if len(self.shape) == 1:
+        if self.nb_holes == 0:
             return ()
         holes = []
         acc = self.start
@@ -168,14 +208,14 @@ class Sequence:
         return tuple(holes)
 
     @property
-    def growth_cells(self) -> tuple[Coord]:
+    def growth_cells(self) -> tuple[tuple[Coord]]:
         head = tuple(
             self.start + (i + 1) * -self.direction
-                for i in range(1, min(self.spaces[0], MAX_SEQ_LEN - self.length))
+                for i in range(min(self.spaces[0], MAX_SEQ_LEN - self.length))
         )
         tail = tuple(self.end + (i + 1) * self.direction
-            for i in range(1, min(self.spaces[1], MAX_SEQ_LEN - self.length)))
-        return head + tail
+            for i in range(min(self.spaces[1], MAX_SEQ_LEN - self.length)))
+        return head, tail
 
     @property
     def rest_cells(self) -> tuple[Coord]:
@@ -205,7 +245,7 @@ class Sequence:
         s += f"  blocks: {', '.join(map(str, self.blocks))}\n"
         s += f"  rest cells: {', '.join(map(str, self.rest_cells))}\n"
         s += f"  cost cells: {', '.join(map(str, self.cost_cells))}\n"
-        s += f"  growth cells: {', '.join(map(str, self.growth_cells))}\n"
+        s += f"  growth cells: {', '.join(map(str, self.growth_cells[0] + self.growth_cells[1]))}\n"
         return s
 
     def __repr__(self):
@@ -226,6 +266,11 @@ class Sequence:
         self.is_blocked = Block(self.is_blocked + other.is_blocked)
         self.spaces = tuple(map(sum, zip(self.spaces, other.spaces)))
         return self
+    
+    @staticmethod
+    def sequence_type(shape: list[int], block_type: Block, capacity: int) -> SeqType:
+        pass
+
 
 
 @dataclass(init=False, repr=True, slots=True)
@@ -272,10 +317,11 @@ class Board:
     def map_sequence_add(self, seq: Sequence) -> None:
         for cell in seq.rest_cells:
             self.seq_map.setdefault(cell, set()).add(seq.id)
-        for cell in seq.cost_cells:
+        for cell in seq.holes:
             self.seq_map.setdefault(cell, set()).add(seq.id)
-        for cell in seq.growth_cells:
-            self.seq_map.setdefault(cell, set()).add(seq.id)
+        for side in seq.growth_cells:
+            for cell in side:
+                self.seq_map.setdefault(cell, set()).add(seq.id)
         for cell in seq.blocks:
             if cell[0] >= 0 and cell[1] >= 0:
                 self.seq_map.setdefault(cell, set()).add(seq.id)
@@ -283,19 +329,36 @@ class Board:
     def map_sequence_remove(self, seq: Sequence) -> None:
         for cell in seq.rest_cells:
             self.seq_map[cell].remove(seq.id)
-        for cell in seq.cost_cells:
+        for cell in seq.holes:
             self.seq_map[cell].remove(seq.id)
         for cell in seq.growth_cells:
             self.seq_map[cell].remove(seq.id)
         for cell in seq.blocks:
             if cell[0] >= 0 and cell[1] >= 0:
                 self.seq_map[cell].remove(seq.id)
+    
+    def find_capturable_sequences(self, pos: Coord, player: int) -> list[int]:
+        if pos not in self.seq_map:
+            return []
+        capturable = []
+        for id in self.seq_map[pos]:
+            seq = self.seq_list[id]
+            if pos in seq.rest_cells and seq.shape == [2] and Block.NO < seq.is_blocked < Block.BOTH:
+                capturable.append(id)
+            elif player != seq.player and pos in seq.cost_cells and seq.shape == [2]:
+                blocks = seq.blocks
+                if len(blocks) == 1 and blocks[0].y >= 0 and blocks[0].x >= 0:
+                    capturable.append(id)
+        return capturable
+            
 
     def add_move(self, pos: Coord, player: int) -> None:
         self.cells[pos] = player
         self.stones.add(pos)
         self.last_move = pos
         print(f"\nAdding move {pos}")
+        capturable = self.find_capturable_sequences(pos, player)
+        print(f"Capturable: {capturable}")
         checked_dir = set()
         to_remove = []
         for seq_id in self.seq_map.get(pos, set()).copy():
@@ -345,6 +408,9 @@ class Board:
             if seq_list:
                 print(f"{cell}: {seq_list}")
         print(f"Last seq id: {self.last_seq_id}")
+        print(f"Sequence list:")
+        for seq in self.seq_list.values():
+            print(seq)
 
     def get_neighbors(self) -> set[Coord]:
         children = set()
@@ -420,3 +486,4 @@ class Board:
 
 # TODO:
 # - Use cache for the Sequence properties that take non-negligeable time when repeated.
+# - Fix sequences too long (ex: shape = [1,1,1,1])
