@@ -178,6 +178,7 @@ class Display:
             self.stone_text = (
                 f"{TEXT_PATH}/classic_black_stone.png",
                 f"{TEXT_PATH}/classic_white_stone.png",
+                f"{TEXT_PATH}/classic_help_stone.png",
             )
 
         self.board = None
@@ -281,6 +282,18 @@ class Display:
                 ),
             )
 
+    def render_help_move(self, pos: Coord) -> None:
+        print(self.stone_text[2])
+        stone = pygame.image.load(self.stone_text[2])
+        stone = pygame.transform.scale(stone, (CELL_SIZE * 0.9, CELL_SIZE * 0.9))
+        self.screen.blit(
+            stone,
+            (
+                pos.x * CELL_SIZE + PADDING * 1.05 - CELL_SIZE // 2,
+                pos.y * CELL_SIZE + PADDING * 1.05 - CELL_SIZE // 2,
+            ),
+        )
+
     def get_valid_move(self) -> Coord | None:
         if self.args.connect4:
             pos = pygame.mouse.get_pos()
@@ -340,15 +353,22 @@ class Display:
         self.update()
         player_type = self.args.players
         total_time = 0
+        had_help = 0
         while True:
             time.sleep(0.01)
             pos = self.handle_event()
             if self.game_over:
                 continue
             if player_type[self.player_turn] == "human":
+                if self.args.helpmove:
+                    if had_help == 0:
+                        self.render_help_move(dumb_algo(self.board))
+                        self.update()
+                        had_help = 1
                 if not pos:
                     continue
             else:
+                had_help = 0
                 start_time = time.time()
                 pos = dumb_algo(self.board)
                 end_time = time.time()

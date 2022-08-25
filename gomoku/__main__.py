@@ -35,6 +35,12 @@ def parse_args(argv: list[str]) -> Namespace:
         action="store_true",
         help="Switch to connect4 gamemode instead of gomoku",
     )
+    parser.add_argument(
+        "-hm",
+        "--helpmove",
+        action="store_true",
+        help="Shows which move is the best for human players",
+    )
 
     return parser.parse_args(argv)
 
