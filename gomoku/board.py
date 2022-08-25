@@ -232,6 +232,28 @@ class Sequence:
             return cells + (self.start - self.direction,)
         else:
             return ()
+    
+    @property
+    def type(self) -> SeqType:
+        if self.capacity < MAX_SEQ_LEN:
+            return SeqType.DEAD
+        match (self.stones, self.nb_holes, self.is_blocked):
+            case (2, 1, Block.HEAD | Block.TAIL): return SeqType.BLOCKED_HOLED_TWO
+            case (2, 0, Block.HEAD | Block.TAIL): return SeqType.BLOCKED_TWO
+            case (2, 1, Block.NO): return SeqType.HOLED_TWO
+            case (2, 0, Block.NO): return SeqType.TWO
+            case (3, 2, Block.HEAD | Block.TAIL): return SeqType.BLOCKED_DOUBLE_HOLED_THREE
+            case (3, 1, Block.HEAD | Block.TAIL): return SeqType.BLOCKED_HOLED_THREE
+            case (3, 0, Block.HEAD | Block.TAIL): return SeqType.BLOCKED_THREE
+            case (3, 2, Block.NO): return SeqType.DOUBLE_HOLED_THREE
+            case (3, 1, Block.NO): return SeqType.HOLED_THREE
+            case (3, 0, Block.NO): return SeqType.THREE
+            case (4, 1, Block.HEAD | Block.TAIL): return SeqType.BLOCKED_HOLED_FOUR
+            case (4, 0, Block.HEAD | Block.TAIL): return SeqType.BLOCKED_FOUR
+            case (4, 1, Block.NO): return SeqType.HOLED_FOUR
+            case (4, 0, Block.NO): return SeqType.FOUR
+            case (5, _, _): return SeqType.FIVE
+            case _ : return SeqType.DEAD
 
     def __str__(self):
         s = f"Sequence {self.id} (p{self.player}):\n"
@@ -243,6 +265,7 @@ class Sequence:
         s += f"  spaces: {self.spaces}\n"
         s += f"  is_blocked: {self.is_blocked.name}\n"
         s += f"  blocks: {', '.join(map(str, self.blocks))}\n"
+        s += f"  type: {self.type.name} (score: {self.type})\n"
         s += f"  rest cells: {', '.join(map(str, self.rest_cells))}\n"
         s += f"  cost cells: {', '.join(map(str, self.cost_cells))}\n"
         s += f"  growth cells: {', '.join(map(str, self.growth_cells[0] + self.growth_cells[1]))}\n"
@@ -266,11 +289,6 @@ class Sequence:
         self.is_blocked = Block(self.is_blocked + other.is_blocked)
         self.spaces = tuple(map(sum, zip(self.spaces, other.spaces)))
         return self
-    
-    @staticmethod
-    def sequence_type(shape: list[int], block_type: Block, capacity: int) -> SeqType:
-        pass
-
 
 
 @dataclass(init=False, repr=True, slots=True)
@@ -328,14 +346,15 @@ class Board:
     
     def map_sequence_remove(self, seq: Sequence) -> None:
         for cell in seq.rest_cells:
-            self.seq_map[cell].remove(seq.id)
+            self.seq_map[cell].discard(seq.id)
         for cell in seq.holes:
-            self.seq_map[cell].remove(seq.id)
-        for cell in seq.growth_cells:
-            self.seq_map[cell].remove(seq.id)
+            self.seq_map[cell].discard(seq.id)
+        for side in seq.growth_cells:
+            for cell in side:
+                self.seq_map[cell].discard(seq.id)
         for cell in seq.blocks:
             if cell[0] >= 0 and cell[1] >= 0:
-                self.seq_map[cell].remove(seq.id)
+                self.seq_map[cell].discard(seq.id)
     
     def find_capturable_sequences(self, pos: Coord, player: int) -> list[int]:
         if pos not in self.seq_map:
@@ -343,9 +362,7 @@ class Board:
         capturable = []
         for id in self.seq_map[pos]:
             seq = self.seq_list[id]
-            if pos in seq.rest_cells and seq.shape == [2] and Block.NO < seq.is_blocked < Block.BOTH:
-                capturable.append(id)
-            elif player != seq.player and pos in seq.cost_cells and seq.shape == [2]:
+            if player != seq.player and pos in seq.cost_cells and seq.shape == [2]:
                 blocks = seq.blocks
                 if len(blocks) == 1 and blocks[0].y >= 0 and blocks[0].x >= 0:
                     capturable.append(id)
@@ -366,6 +383,8 @@ class Board:
             checked_dir.add(seq.direction)
             if seq.player == player or pos < seq.start - seq.direction or pos > seq.end + seq.direction:
                 updated_seq = self.get_sequence(pos, seq.direction, player)
+                if updated_seq is None:
+                    continue
                 updated_seq.id = seq.id
                 self.seq_list[seq.id] = updated_seq
                 self.map_sequence_add(updated_seq)
