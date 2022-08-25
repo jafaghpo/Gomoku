@@ -5,6 +5,7 @@ import pygame_menu
 import numpy as np
 import sys
 import time
+from random import randint as rand
 from copy import deepcopy
 from gomoku.board import Board, Coord
 from gomoku.engine import dumb_algo
@@ -237,7 +238,6 @@ class Display:
         stone = pygame.image.load(self.stone_text[player])
         if self.args.connect4:
             stone = pygame.transform.scale(stone, (self.g_y, self.g_y))
-            print(pos)
             self.screen.blit(
                 stone,
                 (
@@ -258,7 +258,9 @@ class Display:
     def render_all_cells(self) -> None:
         indexes = np.argwhere(self.board.cells != 0)
         for index in indexes:
-            self.render_cell(Coord(index), self.board.cells[index] - 1)
+            y, x = index
+
+            self.render_cell(Coord(y, x), self.board.cells[y][x] - 1)
 
     def render_last_move(self, pos: Coord) -> None:
         if self.args.connect4 == False:
@@ -337,7 +339,6 @@ class Display:
             self.render_last_move(self.board.last_move)
         self.update()
         player_type = self.args.players
-        print(player_type)
         total_time = 0
         while True:
             time.sleep(0.01)
@@ -352,25 +353,21 @@ class Display:
                 pos = dumb_algo(self.board)
                 end_time = time.time()
                 total_time = end_time - start_time
-                print(f"time played:{total_time:.4f}")
                 if not pos:
                     self.game_over = True
                     continue
-            # if total_time > 0:
-            #    font = pygame.font.SysFont(None, 24)
-            #    img = font.render(f"{total_time:.4f}", True, (0, 0, 0))
-            #    self.screen.blit(img, (20, 20))
-            #    self.render_background()
-            #    self.render_board()
+            if total_time > 0:
+                self.render_background()
+                self.render_board()
+                self.render_all_cells()
+                font = pygame.font.SysFont(None, 24)
+                img = font.render(f"{total_time:.4f}", True, (0, 0, 0))
+                self.screen.blit(img, (10, 10))
             self.board_history.append(deepcopy(self.board))
-            # self.render_all_cells()
             self.render_cell(pos, self.player_turn)
             self.render_last_move(pos)
             self.update()
             self.board.add_move(pos, self.player_turn + 1)
-            # if self.board.check_win(pos, self.player_turn, self.args.connect4):
-            #    print(f"player: {self.player_turn} won the game.")
-            #    sys.exit(pygame.quit())
 
             self.player_turn ^= 1
 
