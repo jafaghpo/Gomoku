@@ -32,7 +32,7 @@ class SeqType(IntEnum):
     # x o o o - -
     BLOCKED_THREE = 1700
     # o - o - o
-    DOBLE_HOLED_THREE = 1800
+    DOUBLE_HOLED_THREE = 1800
     # - o o - o -
     HOLED_THREE = 4900
     # - o o o - -
@@ -252,7 +252,7 @@ class Sequence:
             case (4, 0, Block.HEAD | Block.TAIL): return SeqType.BLOCKED_FOUR
             case (4, 1, Block.NO): return SeqType.HOLED_FOUR
             case (4, 0, Block.NO): return SeqType.FOUR
-            case (5, _, _): return SeqType.FIVE
+            case (5, 0, _): return SeqType.FIVE
             case _ : return SeqType.DEAD
 
     def __str__(self):
@@ -337,6 +337,8 @@ class Board:
             self.seq_map.setdefault(cell, set()).add(seq.id)
         for cell in seq.holes:
             self.seq_map.setdefault(cell, set()).add(seq.id)
+        for cell in seq.cost_cells:
+            self.seq_map.setdefault(cell, set()).add(seq.id)
         for side in seq.growth_cells:
             for cell in side:
                 self.seq_map.setdefault(cell, set()).add(seq.id)
@@ -348,6 +350,8 @@ class Board:
         for cell in seq.rest_cells:
             self.seq_map[cell].discard(seq.id)
         for cell in seq.holes:
+            self.seq_map[cell].discard(seq.id)
+        for cell in seq.cost_cells:
             self.seq_map[cell].discard(seq.id)
         for side in seq.growth_cells:
             for cell in side:
@@ -390,11 +394,17 @@ class Board:
                 self.map_sequence_add(updated_seq)
             else:
                 if pos == seq.start - seq.direction:
-                    self.seq_list[seq.id].is_blocked = Block.HEAD
+                    self.seq_list[seq.id].is_blocked = Block(self.seq_list[seq.id].is_blocked + Block.HEAD)
+                    for cell in seq.growth_cells[0]:
+                        self.seq_map[cell].discard(seq.id)
                     self.seq_map[seq.start - seq.direction].add(seq.id)
+                    self.seq_list[seq.id].spaces = (0, self.seq_list[seq.id].spaces[1])
                 elif pos == seq.end + seq.direction:
-                    self.seq_list[seq.id].is_blocked = Block.TAIL
+                    self.seq_list[seq.id].is_blocked = Block(self.seq_list[seq.id].is_blocked + Block.TAIL)
+                    for cell in seq.growth_cells[1]:
+                        self.seq_map[cell].discard(seq.id)
                     self.seq_map[seq.end + seq.direction].add(seq.id)
+                    self.seq_list[seq.id].spaces = (self.seq_list[seq.id].spaces[0], 0)
                 elif seq.start < pos < seq.end:
                     seqs = tuple(filter(lambda s: s != None,
                         (self.get_sequence(seq.start, seq.direction, seq.player),
@@ -506,3 +516,6 @@ class Board:
 # TODO:
 # - Use cache for the Sequence properties that take non-negligeable time when repeated.
 # - Fix sequences too long (ex: shape = [1,1,1,1])
+# - Fix combining sequences with same direction
+#   current behaviour is that both sequences have the same value
+#   target behaviour is that the longer sequence is used and the shorter sequence is discarded
