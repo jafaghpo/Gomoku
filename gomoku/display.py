@@ -95,10 +95,20 @@ class MatchMenu:
         )
 
         self.menu.add.button("Resume", self.on_resume)
+        self.menu.add.selector(
+            "Help move",
+            [("Off", 0), ("On", 1)],
+            onchange=self.on_help_move,
+        )
         self.menu.add.button("Quit", self.on_quit)
 
     def on_quit(self):
         sys.exit(pygame.quit())
+
+    def on_help_move(self, value: tuple, help: int):
+        selected, index = value
+        print(f'Selected difficulty: "{selected}" ({help}) at index {index}')
+        self.display.args.helpmove = selected[1]
 
     def on_resume(self):
         self.menu.close(self.display.run())
