@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from enum import IntEnum
 from collections import namedtuple
+from functools import cache
+
 
 MAX_SEQ_LEN = 5
 
@@ -9,43 +11,6 @@ class Block(IntEnum):
     HEAD = 1
     TAIL = 2
     BOTH = 3
-
-
-# UNUSED
-class SeqType(IntEnum):
-    # x o o o x
-    DEAD = 0
-    # x o - o - -
-    BLOCKED_HOLED_TWO = 300
-    # x o o - - -
-    BLOCKED_TWO = -1000 # negative value because it can be captured by opponent
-    # - o - o - -
-    HOLED_TWO = 1450
-    # - o o - - -
-    TWO = 1500
-    # x o - o - o
-    BLOCKED_DOUBLE_HOLED_THREE = 1550
-    # x o o - o -
-    BLOCKED_HOLED_THREE = 1650
-    # x o o o - -
-    BLOCKED_THREE = 1700
-    # o - o - o
-    DOUBLE_HOLED_THREE = 1800
-    # - o o - o -
-    HOLED_THREE = 4900
-    # - o o o - -
-    THREE = 5000
-    # x o o - o o || x o o o - o
-    BLOCKED_HOLED_FOUR = 9000
-    # x o o o o -
-    BLOCKED_FOUR = 10000
-    # - o o - o o || - o o o - o
-    HOLED_FOUR = 10500
-    # - o o o o -
-    FOUR = 100000
-    # o o o o o
-    FIVE = 2e9
-
 
 class Coord(namedtuple("Coord", "y x")):
     __slots__ = ()
@@ -80,17 +45,17 @@ class Coord(namedtuple("Coord", "y x")):
     def __neg__(self):
         return Coord(-self.y, -self.x)
 
-    def range(self, direction, len, step=1):
+    def range(self, dir, len, step=1):
         for i in range(0, len, step):
-            yield self + direction * i
+            yield self + dir * i
 
-    def range2d(self, direction, shape, step2d=1, step1d=1):
+    def range2d(self, dir, shape, step2d=1, step1d=1):
         current = self
         for len in shape:
-            for coord in current.range(direction, len, step1d):
+            for coord in current.range(dir, len, step1d):
                 current = coord
                 yield coord
-            current += direction * (step2d + 1)
+            current += dir * (step2d + 1)
 
     def in_range(self, r) -> bool:
         match r:
@@ -102,7 +67,7 @@ class Coord(namedtuple("Coord", "y x")):
                 return 0 <= self.y < i and 0 <= self.x < i
             case _:
                 return False
-
+    
     def get_block_dir(self) -> Block:
         if self.y == -1 or (self.y == 0 and self.x == -1):
             return Block.HEAD
@@ -110,7 +75,6 @@ class Coord(namedtuple("Coord", "y x")):
             return Block.TAIL
 
 
-DIRECTIONS = tuple(map(Coord._make, ((0, -1), (-1, -1), (-1, 0), (-1, 1))))
 DIR_STR = {
     Coord(0, -1): "← (left)",
     Coord(-1, -1): "↖ (up-left)",
@@ -123,27 +87,67 @@ DIR_STR = {
 }
 
 
-@dataclass(slots=True)
+class SeqType(IntEnum):
+    # x o o o x
+    DEAD = 0
+    # x o - o - -
+    BLOCKED_HOLED_TWO = 300
+    # x o o - - -
+    BLOCKED_TWO = -1000 # negative value because it can be captured by opponent
+    # - o - o - -
+    HOLED_TWO = 1450
+    # - o o - - -
+    TWO = 1500
+    # x o - o - o
+    BLOCKED_DOUBLE_HOLED_THREE = 1550
+    # x o o - o -
+    BLOCKED_HOLED_THREE = 1650
+    # x o o o - -
+    BLOCKED_THREE = 1700
+    # o - o - o
+    DOUBLE_HOLED_THREE = 1800
+    # - o o - o -
+    HOLED_THREE = 4900
+    # - o o o - -
+    THREE = 5000
+    # x o o - o o || x o o o - o
+    BLOCKED_HOLED_FOUR = 9000
+    # x o o o o -
+    BLOCKED_FOUR = 10000
+    # - o o - o o || - o o o - o
+    HOLED_FOUR = 10500
+    # - o o o o -
+    FOUR = 100000
+    # o o o o o
+    FIVE = 2e9
+
+@dataclass(init=False, slots=True)
 class Sequence:
     """
     A sequence is a set of cells that are aligned in some way.
     """
 
     player: int
-    shape: list[int]
+    shape: tuple[int]
     start: Coord
-    direction: Coord
-    spaces: tuple[int]
+    dir: Coord
+    spaces: tuple[int] = (0, 0)
     is_blocked: Block = Block.NO
     id: int = -1
 
     @property
     def stones(self) -> int:
-        return sum(self.shape)
+        @cache
+        def stones(shape):
+            return sum(shape)
+        return stones(self.shape)
     
     @property
     def nb_holes(self) -> int:
-        return len(self.shape) - 1
+        @cache
+        def nb_holes(shape):
+            return len(shape) - 1
+        return nb_holes(self.shape)
 
     @property
     def length(self) -> int:
@@ -155,18 +159,18 @@ class Sequence:
 
     @property
     def end(self) -> Coord:
-        return self.start + (self.length - 1) * self.direction
+        return self.start + (self.length - 1) * self.dir
 
     @property
     def blocks(self) -> tuple[Coord]:
         if self.is_blocked == Block.NO:
             return ()
         elif self.is_blocked == Block.HEAD:
-            return (self.start - self.direction,)
+            return (self.start - self.dir,)
         elif self.is_blocked == Block.TAIL:
-            return (self.end + self.direction,)
+            return (self.end + self.dir,)
         else:
-            return (self.start - self.direction, self.end + self.direction)
+            return (self.start - self.dir, self.end + self.dir)
 
     @property
     def holes(self) -> tuple[Coord]:
@@ -175,34 +179,34 @@ class Sequence:
         holes = []
         acc = self.start
         for subseq_len in self.shape[:-1]:
-            acc += self.direction * subseq_len
+            acc += self.dir * subseq_len
             holes.append(acc)
-            acc += self.direction
+            acc += self.dir
         return tuple(holes)
 
     @property
     def growth_cells(self) -> tuple[tuple[Coord]]:
         head = tuple(
-            self.start + (i + 1) * -self.direction
+            self.start + (i + 1) * -self.dir
                 for i in range(min(self.spaces[0], MAX_SEQ_LEN - self.length))
         )
-        tail = tuple(self.end + (i + 1) * self.direction
+        tail = tuple(self.end + (i + 1) * self.dir
             for i in range(min(self.spaces[1], MAX_SEQ_LEN - self.length)))
         return head, tail
 
     @property
     def rest_cells(self) -> tuple[Coord]:
-        return self.start.range2d(self.direction, self.shape)
+        return self.start.range2d(self.dir, self.shape)
 
     @property
     def cost_cells(self) -> tuple[Coord]:
         cells = self.holes
         if self.is_blocked == Block.NO:
-            return cells + (self.start - self.direction, self.end + self.direction)
+            return cells + (self.start - self.dir, self.end + self.dir)
         elif self.is_blocked == Block.HEAD:
-            return cells + (self.end + self.direction,)
+            return cells + (self.end + self.dir,)
         elif self.is_blocked == Block.TAIL:
-            return cells + (self.start - self.direction,)
+            return cells + (self.start - self.dir,)
         else:
             return ()
     
@@ -234,7 +238,7 @@ class Sequence:
         s += f"  length (including spaces): {self.length}\n"
         s += f"  shape: {self.shape}\n"
         s += f"  start: {self.start}\n"
-        s += f"  direction: {DIR_STR[self.direction]}\n"
+        s += f"  dir: {DIR_STR[self.dir]}\n"
         s += f"  spaces: {self.spaces}\n"
         s += f"  is_blocked: {self.is_blocked.name}\n"
         s += f"  blocks: {', '.join(map(str, self.blocks))}\n"
@@ -246,19 +250,18 @@ class Sequence:
 
     def __repr__(self):
         s = f"Sequence(player={self.player}, shape={self.shape}, start={self.start}, "
-        s += f"direction={DIR_STR[self.direction]}, is_blocked={self.is_blocked}, id={self.id}, "
+        s += f"dir={DIR_STR[self.dir]}, is_blocked={self.is_blocked}, id={self.id}, "
         s += f"spaces={self.spaces})"
         return s
 
     def __add__(self, other):
         self, other = (
             (self, other)
-            if self.direction.get_block_dir() == Block.HEAD
+            if self.dir.get_block_dir() == Block.HEAD
             else (other, self)
         )
-        self.shape[0] += other.shape[0] - 1
-        self.shape = self.shape[::-1] + other.shape[1:]
-        self.direction = other.direction
+        self.shape = (self.shape[0] + other.shape[0] - 1,) + self.shape[::-1] + other.shape[1:]
+        self.dir = other.dir
         self.is_blocked = Block(self.is_blocked + other.is_blocked)
         self.spaces = tuple(map(sum, zip(self.spaces, other.spaces)))
         return self

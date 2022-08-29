@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 import numpy as np
 
-from gomoku.sequence import Sequence, Coord, Block, DIRECTIONS
+from gomoku.sequence import Sequence, Coord, Block
 
 
 NEIGHBORS_OFFSET = tuple(
@@ -27,6 +27,8 @@ NEIGHBORS_OFFSET = tuple(
         ),
     )
 )
+
+DIRECTIONS = tuple(map(Coord._make, ((0, -1), (-1, -1), (-1, 0), (-1, 1))))
 
 @dataclass(init=False, repr=True, slots=True)
 class Board:
@@ -102,7 +104,7 @@ class Board:
                 self.seq_map[pos].discard(id)
                 continue
             seq = self.seq_list[id]
-            if player != seq.player and pos in seq.cost_cells and seq.shape == [2]:
+            if player != seq.player and pos in seq.cost_cells and seq.shape == (2,):
                 blocks = seq.blocks
                 if len(blocks) == 1 and blocks[0].y >= 0 and blocks[0].x >= 0:
                     capturable.append(id)
@@ -120,25 +122,25 @@ class Board:
         to_remove = []
         for seq_id in self.seq_map.get(pos, set()).copy():
             seq = self.seq_list[seq_id]
-            checked_dir.add(seq.direction)
-            if seq.player == player or pos < seq.start - seq.direction or pos > seq.end + seq.direction:
-                updated_seq = self.get_sequence(pos, seq.direction, player)
+            checked_dir.add(seq.dir)
+            if seq.player == player or pos < seq.start - seq.dir or pos > seq.end + seq.dir:
+                updated_seq = self.get_sequence(pos, seq.dir, player)
                 if updated_seq is None:
                     continue
                 updated_seq.id = seq.id
                 self.seq_list[seq.id] = updated_seq
                 self.map_sequence_add(updated_seq)
             else:
-                if pos == seq.start - seq.direction:
+                if pos == seq.start - seq.dir:
                     self.seq_list[seq.id].is_blocked = Block.HEAD
-                    self.seq_map[seq.start - seq.direction].add(seq.id)
-                elif pos == seq.end + seq.direction:
+                    self.seq_map[seq.start - seq.dir].add(seq.id)
+                elif pos == seq.end + seq.dir:
                     self.seq_list[seq.id].is_blocked = Block.TAIL
-                    self.seq_map[seq.end + seq.direction].add(seq.id)
+                    self.seq_map[seq.end + seq.dir].add(seq.id)
                 elif seq.start < pos < seq.end:
                     seqs = tuple(filter(lambda s: s != None,
-                        (self.get_sequence(seq.start, seq.direction, seq.player),
-                        self.get_sequence(seq.end, seq.direction, seq.player))
+                        (self.get_sequence(seq.start, seq.dir, seq.player),
+                        self.get_sequence(seq.end, seq.dir, seq.player))
                         ))
                     to_remove.append(seq)
                     for s in seqs:
@@ -146,8 +148,8 @@ class Board:
                         self.last_seq_id += 1
                         self.seq_list[s.id] = s
                         self.map_sequence_add(s)
-            checked_dir.add(seq.direction)
-            checked_dir.add(-seq.direction)
+            checked_dir.add(seq.dir)
+            checked_dir.add(-seq.dir)
         for seq in to_remove:
             self.seq_list.pop(seq.id)
             self.map_sequence_remove(seq)
@@ -199,7 +201,7 @@ class Board:
                         current += dir
                         spaces[idx] += 1
                     return Sequence(
-                        player, shape, start, dir, tuple(spaces), is_blocked
+                        player, tuple(shape), start, dir, tuple(spaces), is_blocked
                     )
                 case (0, False):
                     empty = True
@@ -218,21 +220,21 @@ class Board:
                         shape.append(sub_len)
                     is_blocked = block_dir
                     return Sequence(
-                        player, shape, start, dir, tuple(spaces), is_blocked
+                        player, tuple(shape), start, dir, tuple(spaces), is_blocked
                     )
                 case (p, True) if p != player:
                     spaces[idx] = 1
                     if sub_len != 0:
                         shape.append(sub_len)
                     return Sequence(
-                        player, shape, start, dir, tuple(spaces), is_blocked
+                        player, tuple(shape), start, dir, tuple(spaces), is_blocked
                     )
             current += dir
         if not empty:
             is_blocked = block_dir
         if sub_len != 0:
             shape.append(sub_len)
-        return Sequence(player, shape, start, dir, tuple(spaces), is_blocked)
+        return Sequence(player, tuple(shape), start, dir, tuple(spaces), is_blocked)
     
     def get_sequence(self, current: Coord, dir: Coord, player: int) -> Sequence | None:
         head_seq = self.half_sequence(current, dir, player)
