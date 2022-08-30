@@ -56,6 +56,16 @@ class Board:
         return (
             "\n".join(map(lambda cell: player_repr[cell], row) for row in self.cells),
         )
+    
+    def add_stone(self, pos: Coord) -> None:
+        self.stones.add(pos)
+        self.cells[pos] = 1
+        self.last_move = pos
+    
+    def update_sequences(self, seq: Sequence) -> None:
+        self.seq_list[seq.id] = seq
+        for coord in seq.coords:
+            self.seq_map[coord].add(seq.id)
 
     def get_pos_c4(self, x: int):
         for y in range(5, -1, -1):
@@ -146,7 +156,7 @@ class Board:
             current += seq.dir
             count += 1
         return (count, 0) if seq.dir.get_block_dir() == Block.HEAD else (0, count)
-    
+
     def get_half_sequence(self, pos: Coord, dir: Coord, player: int) -> Sequence:
         board_slice = self.get_slice(pos, dir)
         shape = self.slice_to_shape(board_slice)
@@ -163,8 +173,6 @@ class Board:
             return sequence
         return None
   
-
-
 
 # TODO:
 # - Use cache for the Sequence properties that take non-negligeable time when repeated.

@@ -121,7 +121,7 @@ class SeqType(IntEnum):
     # o o o o o
     FIVE = 2e9
 
-@dataclass(init=False, slots=True)
+@dataclass(slots=True)
 class Sequence:
     """
     A sequence is a set of cells that are aligned in some way.

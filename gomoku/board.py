@@ -1,7 +1,8 @@
 from dataclasses import dataclass
 import numpy as np
+from functools import cache
 
-from gomoku.sequence import Sequence, Coord, Block
+from gomoku.sequence import Sequence, Coord, Block, MAX_SEQ_LEN
 
 
 NEIGHBORS_OFFSET = tuple(
@@ -44,7 +45,7 @@ class Board:
     stones: set[Coord]
 
     def __init__(self, shape: tuple[int, int] = (19, 19)) -> None:
-        self.cells = np.zeros(shape, dtype=np.uint8)
+        self.cells = np.zeros(shape, dtype=int)
         self.seq_map = {}
         self.seq_list = {}
         self.stones = set()
@@ -181,66 +182,92 @@ class Board:
             children.update(neighbors)
         return children
 
-    def half_sequence(self, current: Coord, dir: Coord, player: int) -> Sequence:
+    @staticmethod
+    @cache
+    def slice_to_shape(slice: np.ndarray):
+        print("Slicing")
+        player = slice[0]
         shape = []
-        start = current
-        current += dir
-        is_blocked = Block.NO
         sub_len = 1
-        spaces = [0, 0]
-        block_dir = dir.get_block_dir()
-        idx = 0 if block_dir == Block.HEAD else 1
-        empty = False
-        while current.in_range(self.cells.shape):
-            match (self.cells[current], empty):
-                case (0, True):
-                    while (
-                        current.in_range(self.cells.shape)
-                        and self.cells[current] != player ^ 3
-                    ):
-                        current += dir
-                        spaces[idx] += 1
-                    return Sequence(
-                        player, tuple(shape), start, dir, tuple(spaces), is_blocked
-                    )
-                case (0, False):
-                    empty = True
-                    spaces[idx] += 1
-                    if sub_len != 0:
-                        shape.append(sub_len)
-                        sub_len = 0
-                case (p, _) if p == player:
-                    spaces[idx] = 0
-                    sub_len += 1
-                    start = current
-                    empty = False
-                case (p, False) if p != player:
-                    spaces[idx] = 0
-                    if sub_len != 0:
-                        shape.append(sub_len)
-                    is_blocked = block_dir
-                    return Sequence(
-                        player, tuple(shape), start, dir, tuple(spaces), is_blocked
-                    )
-                case (p, True) if p != player:
-                    spaces[idx] = 1
-                    if sub_len != 0:
-                        shape.append(sub_len)
-                    return Sequence(
-                        player, tuple(shape), start, dir, tuple(spaces), is_blocked
-                    )
-            current += dir
-        if not empty:
-            is_blocked = block_dir
-        if sub_len != 0:
-            shape.append(sub_len)
-        return Sequence(player, tuple(shape), start, dir, tuple(spaces), is_blocked)
+        holed = False
+        for i in range(1, len(slice)):
+            if slice[i] == player:
+                sub_len += 1
+                holed = False
+            else:
+                if sub_len > 0:
+                    shape.append(sub_len)
+                    sub_len = 0
+                if holed or slice[i] == player ^ 3:
+                    return shape
+                holed = True
+        return shape if sub_len == 0 else shape + [sub_len]
+
+    def slice_up(self, y: int, x: int) -> np.ndarray:
+        return self.cells[max(y - 4, 0):y + 1, x][::-1]
+
+    def slice_down(self, y: int, x: int) -> np.ndarray:
+        return self.cells[y:y + MAX_SEQ_LEN, x]
+
+    def slice_left(self, y: int, x: int) -> np.ndarray:
+        return self.cells[y, max(x - 4, 0):x + 1][::-1]
+
+    def slice_right(self, y: int, x: int) -> np.ndarray:
+        return self.cells[y, x:x + MAX_SEQ_LEN]
+
+    def slice_up_left(self, y: int, x: int) -> np.ndarray:
+        y, x = self.cells.shape[0] - 1 - y, self.cells.shape[1] - 1 - x
+        np.fliplr(np.flipud(self.cells))[y:, x:].diagonal()[:MAX_SEQ_LEN]
+
+    def slice_up_right(self, y: int, x: int) -> np.ndarray:
+        y = self.cells.shape[0] - 1 - y
+        np.flipud(self.cells)[y:, x:].diagonal()[:MAX_SEQ_LEN]
+
+    def slice_down_left(self, y: int, x: int) -> np.ndarray:
+        x = self.cells.shape[1] - 1 - x
+        np.fliplr(self.cells)[y:, x:].diagonal()[:MAX_SEQ_LEN]
+
+    def slice_down_right(self, y: int, x: int) -> np.ndarray:
+        return np.diagonal(self.cells[y:, x:])[:MAX_SEQ_LEN]
     
-    def get_sequence(self, current: Coord, dir: Coord, player: int) -> Sequence | None:
-        head_seq = self.half_sequence(current, dir, player)
-        tail_seq = self.half_sequence(current, -dir, player)
+    def get_slice(self, pos: Coord, dir: Coord) -> np.ndarray:
+        y, x = pos
+        match dir:
+            case (0, -1): return self.slice_left(y, x)
+            case (0, 1): return self.slice_right(y, x)
+            case (-1, 0): return self.slice_up(y, x)
+            case (1, 0): return self.slice_down(y, x)
+            case (-1, -1): return self.slice_up_left(y, x)
+            case (-1, 1): return self.slice_up_right(y, x)
+            case (1, -1): return self.slice_down_left(y, x)
+            case (1, 1): return self.slice_down_right(y, x)
+            case _: return None
+    
+    def get_spaces_after_seq(self, seq: Sequence) -> tuple[int, int]:
+        current = seq.end
+        count = 0
+        while (current.in_range(self.cells.shape)
+            and self.cells[current + seq.dir] == seq.player
+            and self.cells[current + seq.dir] == 0):
+            current += seq.dir
+            count += 1
+        return (count, 0) if seq.dir.get_block_dir() == Block.HEAD else (0, count)
+
+    def get_half_sequence(self, pos: Coord, dir: Coord, player: int) -> Sequence:
+        print(f"Getting half sequence at {pos} in direction {dir}")
+        board_slice = self.get_slice(pos, dir)
+        print(board_slice)
+        shape = self.slice_to_shape(tuple(board_slice))
+        seq = Sequence(player, tuple(shape), pos, dir)
+        seq.spaces = self.get_spaces_after_seq(seq)
+        seq.is_blocked = Block.NO if sum(seq.spaces) == 0 else seq.dir.get_block_dir()
+        return seq
+
+    def get_sequence(self, pos: Coord, dir: Coord, player: int) -> Sequence | None:
+        head_seq = self.get_half_sequence(pos, dir, player)
+        tail_seq = self.get_half_sequence(pos, -dir, player)
         sequence = head_seq + tail_seq
-        if sequence.length >= 2:
+        if sequence.length >= 2 and sequence.capacity >= 5:
             return sequence
         return None
 
