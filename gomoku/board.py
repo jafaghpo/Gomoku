@@ -2,32 +2,65 @@ from dataclasses import dataclass
 import numpy as np
 from functools import cache
 
-from gomoku.sequence import Sequence, Coord, Block, MAX_SEQ_LEN
+from gomoku.sequence import Sequence, SeqType, Coord, Block, MAX_SEQ_LEN
 
 
-NEIGHBORS_OFFSET = tuple(
-    map(
-        Coord._make,
-        (
-            (-2, -2),
-            (-2, 0),
-            (-2, 2),
-            (-1, -1),
-            (-1, 0),
-            (-1, 1),
-            (0, -2),
-            (0, -1),
-            (0, 1),
-            (0, 2),
-            (1, -1),
-            (1, 0),
-            (1, 1),
-            (2, -2),
-            (2, 0),
-            (2, 2),
-        ),
-    )
-)
+def slice_up(board: np.ndarray, y: int, x: int, size: int) -> tuple[int]:
+    return tuple(board[max(y - size - 1, 0):y + 1, x][::-1])
+
+def slice_down(board: np.ndarray, y: int, x: int, size: int) -> tuple[int]:
+    return tuple(board[y:y + size, x])
+
+def slice_left(board: np.ndarray, y: int, x: int, size: int) -> tuple[int]:
+    return tuple(board[y, max(x - size - 1, 0):x + 1][::-1])
+
+def slice_right(board: np.ndarray, y: int, x: int, size: int) -> tuple[int]:
+    return tuple(board[y, x:x + size])
+
+def slice_up_left(board: np.ndarray, y: int, x: int, size: int) -> tuple[int]:
+    y, x = board.shape[0] - 1 - y, board.shape[1] - 1 - x
+    return tuple(np.fliplr(np.flipud(board))[y:, x:].diagonal()[:size])
+
+def slice_up_right(board: np.ndarray, y: int, x: int, size: int) -> tuple[int]:
+    y = board.shape[0] - 1 - y
+    return tuple(np.flipud(board)[y:, x:].diagonal()[:size])
+
+def slice_down_left(board: np.ndarray, y: int, x: int, size: int) -> tuple[int]:
+    x = board.shape[1] - 1 - x
+    return tuple(np.fliplr(board)[y:, x:].diagonal()[:size])
+
+def slice_down_right(board: np.ndarray, y: int, x: int, size: int) -> tuple[int]:
+    return tuple(np.diagonal(board[y:, x:])[:size])
+
+SLICE_MAP = {
+    (0, -1): slice_left,
+    (0, 1): slice_right,
+    (-1, 0): slice_up,
+    (1, 0): slice_down,
+    (-1, -1): slice_up_left,
+    (-1, 1): slice_up_right,
+    (1, -1): slice_down_left,
+    (1, 1): slice_down_right,
+}
+
+NEIGHBORS_OFFSET = tuple((
+    Coord(-2, -2),
+    Coord(-2, 0),
+    Coord(-2, 2),
+    Coord(-1, -1),
+    Coord(-1, 0),
+    Coord(-1, 1),
+    Coord(0, -2),
+    Coord(0, -1),
+    Coord(0, 1),
+    Coord(0, 2),
+    Coord(1, -1),
+    Coord(1, 0),
+    Coord(1, 1),
+    Coord(2, -2),
+    Coord(2, 0),
+    Coord(2, 2),
+))
 
 DIRECTIONS = tuple(map(Coord._make, ((0, -1), (-1, -1), (-1, 0), (-1, 1))))
 
@@ -54,9 +87,21 @@ class Board:
 
     def __str__(self) -> str:
         player_repr = {0: ".", 1: "X", 2: "O"}
-        return (
-            "\n".join(map(lambda cell: player_repr[cell], row) for row in self.cells),
-        )
+        s = "Cells:\n"
+        s += "\n".join(
+            " ".join(map(lambda cell: player_repr[cell], row))
+            for row in self.cells)
+        s += "\nStones: " + " ".join(str(stone) for stone in self.stones) + "\n"
+        for seq in self.seq_list.values():
+            s += str(seq)
+        s += "Sequence map:\n"
+        for cell, seq_ids in self.seq_map.items():
+            if seq_ids:
+                s += f"{cell}: {seq_ids}\n"
+        s += "Last sequence id: " + str(self.last_seq_id) + "\n"
+        s += "Last move: " + str(self.last_move) + "\n"
+        return s
+        
 
     def get_pos_c4(self, x: int):
         for y in range(5, -1, -1):
@@ -70,111 +115,121 @@ class Board:
         return self.cells[(x, 0)] == 0
 
     def can_place(self, pos: Coord) -> bool:
+        """
+        Returns whether the given position is a valid move,
+        meaning not out of bounds and not already occupied.
+        """
         return pos.in_range(self.cells.shape) and self.cells[pos] == 0
 
-    def map_sequence_add(self, seq: Sequence) -> None:
-        for cell in seq.rest_cells:
-            self.seq_map.setdefault(cell, set()).add(seq.id)
-        for cell in seq.holes:
-            self.seq_map.setdefault(cell, set()).add(seq.id)
-        for side in seq.growth_cells:
-            for cell in side:
-                self.seq_map.setdefault(cell, set()).add(seq.id)
-        for cell in seq.blocks:
-            if cell[0] >= 0 and cell[1] >= 0:
-                self.seq_map.setdefault(cell, set()).add(seq.id)
-    
-    def map_sequence_remove(self, seq: Sequence) -> None:
-        for cell in seq.rest_cells:
-            self.seq_map[cell].discard(seq.id)
-        for cell in seq.holes:
-            self.seq_map[cell].discard(seq.id)
-        for side in seq.growth_cells:
-            for cell in side:
-                self.seq_map[cell].discard(seq.id)
-        for cell in seq.blocks:
-            if cell[0] >= 0 and cell[1] >= 0:
-                self.seq_map[cell].discard(seq.id)
-    
-    def find_capturable_sequences(self, pos: Coord, player: int) -> list[int]:
-        if pos not in self.seq_map:
-            return []
-        capturable = []
-        for id in self.seq_map[pos].copy():
-            if not id in self.seq_list:
-                self.seq_map[pos].discard(id)
-                continue
-            seq = self.seq_list[id]
-            if player != seq.player and pos in seq.cost_cells and seq.shape == (2,):
-                blocks = seq.blocks
-                if len(blocks) == 1 and blocks[0].y >= 0 and blocks[0].x >= 0:
-                    capturable.append(id)
-        return capturable
 
+    def remove_sequence(self, id: int) -> None:
+        """
+        Remove a sequence from the board.
+        """
+        seq = self.seq_list.pop(id)
+        for cell in seq.rest_cells:
+            self.seq_map[cell].discard(id)
+        for cell in seq.growth_cells:
+            self.seq_map[cell].discard(id)
+        for cell in seq.block_cells:
+            self.seq_map[cell].discard(id)
+    
+    def add_sequence(self, seq: Sequence) -> None:
+        """
+        Add a sequence to the board.
+        """
+        if seq.type == SeqType.DEAD:
+            return
+        if seq.id == -1:
+            seq.id = self.last_seq_id
+            self.last_seq_id += 1
+        for cell in seq.rest_cells:
+            self.seq_map.setdefault(cell, set()).add(seq.id)
+        for cell in seq.growth_cells:
+            self.seq_map.setdefault(cell, set()).add(seq.id)
+        for cell in seq.block_cells:
+            self.seq_map.setdefault(cell, set()).add(seq.id)
+        self.seq_list[seq.id] = seq
+
+    def replace_sequence(self, pos: Coord, id: int) -> None:
+        """
+        Replace a sequence with a new one if valid but keep the same id.
+        """
+        old = self.seq_list[id]
+        new = self.get_sequence(pos, old.dir, old.player)
+        self.remove_sequence(id)
+        if new.type != SeqType.DEAD:
+            new.id = id
+            self.add_sequence(new)
+    
+    def add_block_to_sequence(self, pos: Coord, id: int, block: Block) -> None:
+        """
+        Add a block to a sequence and remove the sequence if it is dead.
+        """
+        if block == Block.NO:
+            return
+        seq = self.seq_list[id]
+        seq.is_blocked = block
+        index = int(block) - 1
+        length = seq.spaces[index]
+        if seq.capacity - length < MAX_SEQ_LEN:
+            return self.remove_sequence(id)
+        for cell in seq.space_cells[index]:
+            self.seq_map[cell].discard(id)
+        self.seq_map[pos].add(id)
+        
+
+    def split_sequence(self, pos: Coord, id: int) -> None:
+        """
+        Split a sequence into two sequences.
+        """
+        seq = self.seq_list[id]
+        self.remove_sequence(id)
+        head = self.get_sequence(seq.start, seq.dir, seq.player)
+        tail = self.get_sequence(seq.end, seq.dir, seq.player)
+        if head.type != SeqType.DEAD:
+            self.add_sequence(head)
+        if tail.type != SeqType.DEAD:
+            self.add_sequence(tail)
+
+
+    def update_sequences(self, pos: Coord, player: int) -> None:
+        """
+        Update the sequences that are affected by the given position,
+        removing sequences that are no longer valid and adding new ones.
+        """
+        visited = set()
+        for id in self.seq_map.get(pos, set()).copy():
+            seq = self.seq_list[id]
+            visited.add(seq.dir)
+            if seq.player == player:
+                self.replace_sequence(pos, id)
+            elif pos in seq.holes:
+                self.split_sequence(pos, id)
+            elif not pos in seq.cost_cells:
+                self.replace_sequence(pos, id)
+            else:
+                block = seq.can_pos_block(pos)
+                self.add_block_to_sequence(pos, id, block)
+        for d in visited.symmetric_difference(DIRECTIONS):
+            self.add_sequence(self.get_sequence(pos, d, player))
+            
 
     def add_move(self, pos: Coord, player: int) -> None:
+        """
+        Adds a move to the board by placing the player's stone id at the given position
+        and updating the sequences around the new stone.
+        """
         self.cells[pos] = player
         self.stones.add(pos)
         self.last_move = pos
-        print(f"\nAdding move {pos}")
-        capturable = self.find_capturable_sequences(pos, player)
-        print(f"Capturable: {capturable}")
-        checked_dir = set()
-        to_remove = []
-        for seq_id in self.seq_map.get(pos, set()).copy():
-            seq = self.seq_list[seq_id]
-            checked_dir.add(seq.dir)
-            if seq.player == player or pos < seq.start - seq.dir or pos > seq.end + seq.dir:
-                updated_seq = self.get_sequence(pos, seq.dir, player)
-                if updated_seq is None:
-                    continue
-                updated_seq.id = seq.id
-                self.seq_list[seq.id] = updated_seq
-                self.map_sequence_add(updated_seq)
-            else:
-                if pos == seq.start - seq.dir:
-                    self.seq_list[seq.id].is_blocked = Block.HEAD
-                    self.seq_map[seq.start - seq.dir].add(seq.id)
-                elif pos == seq.end + seq.dir:
-                    self.seq_list[seq.id].is_blocked = Block.TAIL
-                    self.seq_map[seq.end + seq.dir].add(seq.id)
-                elif seq.start < pos < seq.end:
-                    seqs = tuple(filter(lambda s: s != None,
-                        (self.get_sequence(seq.start, seq.dir, seq.player),
-                        self.get_sequence(seq.end, seq.dir, seq.player))
-                        ))
-                    to_remove.append(seq)
-                    for s in seqs:
-                        s.id = self.last_seq_id
-                        self.last_seq_id += 1
-                        self.seq_list[s.id] = s
-                        self.map_sequence_add(s)
-            checked_dir.add(seq.dir)
-            checked_dir.add(-seq.dir)
-        for seq in to_remove:
-            self.seq_list.pop(seq.id)
-            self.map_sequence_remove(seq)
-        for dir in DIRECTIONS:
-            if dir in checked_dir:
-                continue
-            sequence = self.get_sequence(pos, dir, player)
-            if not sequence:
-                continue
-            sequence.id = self.last_seq_id
-            self.last_seq_id += 1
-            self.seq_list[sequence.id] = sequence
-            self.map_sequence_add(sequence)
-
-        print("\nSequence map:")
-        for cell, seq_list in self.seq_map.items():
-            if seq_list:
-                print(f"{cell}: {seq_list}")
-        print(f"Last seq id: {self.last_seq_id}")
-        print(f"Sequence list:")
-        for seq in self.seq_list.values():
-            print(seq)
+        self.update_sequences(pos, player)
+        print(self)
 
     def get_neighbors(self) -> set[Coord]:
+        """
+        Returns the coordinates of the neighbor cells of all stones in a 2-cell radius
+        """
         children = set()
         for stone in self.stones:
             raw_neighbors = map(lambda offset: stone + offset, NEIGHBORS_OFFSET)
@@ -184,92 +239,66 @@ class Board:
 
     @staticmethod
     @cache
-    def slice_to_shape(slice: np.ndarray):
-        print("Slicing")
+    def slice_to_shape(slice: np.ndarray) -> tuple[int]:
+        """
+        Returns the shape of a slice of the board.
+
+        A shape is a tuple containing the length of all subsequences separated by empty
+        cells in a direction.
+        ex: [1, 1, 0, 1, 2, 0] -> (2, 1)
+        We stop the sequence at index 4 because '2' is the opponent stone id.
+        """
         player = slice[0]
         shape = []
         sub_len = 1
         holed = False
-        for i in range(1, len(slice)):
-            if slice[i] == player:
+        for cell in slice[1:]:
+            if cell == player:
                 sub_len += 1
                 holed = False
             else:
                 if sub_len > 0:
                     shape.append(sub_len)
                     sub_len = 0
-                if holed or slice[i] == player ^ 3:
-                    return shape
+                if holed or cell == player ^ 3:
+                    return tuple(shape)
                 holed = True
-        return shape if sub_len == 0 else shape + [sub_len]
+        return tuple(shape) if sub_len == 0 else tuple(shape + (sub_len,))
 
-    def slice_up(self, y: int, x: int) -> np.ndarray:
-        return self.cells[max(y - 4, 0):y + 1, x][::-1]
-
-    def slice_down(self, y: int, x: int) -> np.ndarray:
-        return self.cells[y:y + MAX_SEQ_LEN, x]
-
-    def slice_left(self, y: int, x: int) -> np.ndarray:
-        return self.cells[y, max(x - 4, 0):x + 1][::-1]
-
-    def slice_right(self, y: int, x: int) -> np.ndarray:
-        return self.cells[y, x:x + MAX_SEQ_LEN]
-
-    def slice_up_left(self, y: int, x: int) -> np.ndarray:
-        y, x = self.cells.shape[0] - 1 - y, self.cells.shape[1] - 1 - x
-        np.fliplr(np.flipud(self.cells))[y:, x:].diagonal()[:MAX_SEQ_LEN]
-
-    def slice_up_right(self, y: int, x: int) -> np.ndarray:
-        y = self.cells.shape[0] - 1 - y
-        np.flipud(self.cells)[y:, x:].diagonal()[:MAX_SEQ_LEN]
-
-    def slice_down_left(self, y: int, x: int) -> np.ndarray:
-        x = self.cells.shape[1] - 1 - x
-        np.fliplr(self.cells)[y:, x:].diagonal()[:MAX_SEQ_LEN]
-
-    def slice_down_right(self, y: int, x: int) -> np.ndarray:
-        return np.diagonal(self.cells[y:, x:])[:MAX_SEQ_LEN]
-    
-    def get_slice(self, pos: Coord, dir: Coord) -> np.ndarray:
-        y, x = pos
-        match dir:
-            case (0, -1): return self.slice_left(y, x)
-            case (0, 1): return self.slice_right(y, x)
-            case (-1, 0): return self.slice_up(y, x)
-            case (1, 0): return self.slice_down(y, x)
-            case (-1, -1): return self.slice_up_left(y, x)
-            case (-1, 1): return self.slice_up_right(y, x)
-            case (1, -1): return self.slice_down_left(y, x)
-            case (1, 1): return self.slice_down_right(y, x)
-            case _: return None
-    
-    def get_spaces_after_seq(self, seq: Sequence) -> tuple[int, int]:
-        current = seq.end
+    def get_spaces(self, seq: Sequence) -> tuple[int, int]:
+        """
+        Returns the number of empty or ally cells after a sequence in a direction.
+        """
+        current = seq.end + seq.dir
         count = 0
-        while (current.in_range(self.cells.shape)
-            and self.cells[current + seq.dir] == seq.player
-            and self.cells[current + seq.dir] == 0):
-            current += seq.dir
+        for _ in range(MAX_SEQ_LEN):
+            if not current.in_range(self.cells.shape):
+                break
+            elif self.cells[current] == seq.player ^ 3:
+                break
             count += 1
+            current += seq.dir
         return (count, 0) if seq.dir.get_block_dir() == Block.HEAD else (0, count)
 
     def get_half_sequence(self, pos: Coord, dir: Coord, player: int) -> Sequence:
-        print(f"Getting half sequence at {pos} in direction {dir}")
-        board_slice = self.get_slice(pos, dir)
-        print(board_slice)
-        shape = self.slice_to_shape(tuple(board_slice))
-        seq = Sequence(player, tuple(shape), pos, dir)
-        seq.spaces = self.get_spaces_after_seq(seq)
-        seq.is_blocked = Block.NO if sum(seq.spaces) == 0 else seq.dir.get_block_dir()
+        """
+        Returns a sequence in a direction from a position.
+        """
+        board_slice = SLICE_MAP[dir](self.cells, pos.y, pos.x, MAX_SEQ_LEN)
+        shape = self.slice_to_shape(board_slice)
+        seq = Sequence(player, shape, pos, dir)
+        seq.spaces = self.get_spaces(seq)
+        seq.is_blocked = Block.NO if sum(seq.spaces) != 0 else seq.dir.get_block_dir()
         return seq
 
-    def get_sequence(self, pos: Coord, dir: Coord, player: int) -> Sequence | None:
-        head_seq = self.get_half_sequence(pos, dir, player)
-        tail_seq = self.get_half_sequence(pos, -dir, player)
-        sequence = head_seq + tail_seq
-        if sequence.length >= 2 and sequence.capacity >= 5:
-            return sequence
-        return None
+    def get_sequence(self, pos: Coord, dir: Coord, player: int) -> Sequence:
+        """
+        Returns a sequence that combines the sequences starting from the same cell
+        but having opposite directions.
+        """
+        head = self.get_half_sequence(pos, dir, player)
+        tail = self.get_half_sequence(pos, -dir, player)
+        return head + tail
 
 
 # TODO:
