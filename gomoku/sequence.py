@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from enum import IntEnum
 from collections import namedtuple
 from functools import cache
+from typing import ClassVar
 
 
 MAX_SEQ_LEN = 5
@@ -111,6 +112,7 @@ class SeqType(IntEnum):
     # x o - o - -
     BLOCKED_HOLED_TWO = 300
     # x o o - - -
+    BOARD_BLOCKED_TWO = 500
     BLOCKED_TWO = -1000 # negative value because it can be captured by opponent
     # - o - o - -
     HOLED_TWO = 1450
@@ -159,6 +161,8 @@ class Sequence:
     spaces: tuple[int] = (0, 0)
     is_blocked: Block = Block.NO
     id: int = -1
+
+    bounds: ClassVar[Coord] = Coord(19, 19)
 
     @property
     def stones(self) -> int:
@@ -221,23 +225,27 @@ class Sequence:
         """
         Returns the coordinates of the cells that block the sequence.
         """
+        cells = ()
         if self.is_blocked == Block.NO:
             return ()
         elif self.is_blocked == Block.HEAD:
-            return (self.start - self.dir,)
+            cells = (self.start - self.dir,)
         elif self.is_blocked == Block.TAIL:
-            return (self.end + self.dir,)
+            cells = (self.end + self.dir,)
         else:
-            return (self.start - self.dir, self.end + self.dir)
+            cells = (self.start - self.dir, self.end + self.dir)
+        return cells
     
     @property
     def space_cells(self) -> tuple[tuple[Coord]]:
         """
         Returns the coordinates of the cells that are empty around the sequence.
         """
-        head = tuple(self.start + (i + 1) * -self.dir for i in self.spaces[0])
-        tail = tuple(self.end + (i + 1) * self.dir for i in self.spaces[1])
-        return head, tail
+        max_len_head = min(self.spaces[0], MAX_SEQ_LEN - self.length)
+        max_len_tail = min(self.spaces[1], MAX_SEQ_LEN - self.length)
+        head = tuple(self.start + (i + 1) * -self.dir for i in range(max_len_head))
+        tail = tuple(self.end + (i + 1) * self.dir for i in range(max_len_tail))
+        return self.filter_in_bounds(head), self.filter_in_bounds(tail)
 
     @property
     def growth_cells(self) -> tuple[Coord]:
@@ -248,7 +256,7 @@ class Sequence:
         max_len_tail = min(self.spaces[1], MAX_SEQ_LEN - self.length)
         cells = tuple(self.start + (i + 1) * -self.dir for i in range(max_len_head))
         cells += tuple(self.end + (i + 1) * self.dir for i in range(max_len_tail))
-        return cells + self.holes
+        return self.space_cells[0] + self.space_cells[1] + self.holes
         
 
     @property
@@ -266,13 +274,14 @@ class Sequence:
         """
         cells = self.holes
         if self.length >= MAX_SEQ_LEN:
-            return cells
+            return self.filter_in_bounds(cells)
         elif self.is_blocked == Block.NO:
-            return cells + (self.start - self.dir, self.end + self.dir)
+            cells += (self.start - self.dir, self.end + self.dir)
         elif self.is_blocked == Block.HEAD:
-            return cells + (self.end + self.dir,)
+            cells += (self.end + self.dir,)
         elif self.is_blocked == Block.TAIL:
-            return cells + (self.start - self.dir,)
+            cells += (self.start - self.dir,)
+        return self.filter_in_bounds(cells)
     
     @property
     def type(self) -> SeqType:
@@ -281,15 +290,18 @@ class Sequence:
         the number of holes, and the maximum achievable length of the sequence.
         """
         @cache
-        def _type(stones: int, holes: int, is_blocked: Block, capacity: int) -> SeqType:
-            if capacity < MAX_SEQ_LEN:
+        def _type(stones: int, holes: int, is_blocked: Block, is_dead: bool, op_block: bool) -> SeqType:
+            if is_dead:
                 return SeqType.DEAD
             match (stones, holes, is_blocked):
                 case (2, 1, Block.HEAD | Block.TAIL): return SeqType.BLOCKED_HOLED_TWO
+                case (2, 0, Block.HEAD | Block.TAIL) if not op_block:
+                    return SeqType.BOARD_BLOCKED_TWO
                 case (2, 0, Block.HEAD | Block.TAIL): return SeqType.BLOCKED_TWO
                 case (2, 1, Block.NO): return SeqType.HOLED_TWO
                 case (2, 0, Block.NO): return SeqType.TWO
-                case (3, 2, Block.HEAD | Block.TAIL): return SeqType.BLOCKED_DOUBLE_HOLED_THREE
+                case (3, 2, Block.HEAD | Block.TAIL):
+                    return SeqType.BLOCKED_DOUBLE_HOLED_THREE
                 case (3, 1, Block.HEAD | Block.TAIL): return SeqType.BLOCKED_HOLED_THREE
                 case (3, 0, Block.HEAD | Block.TAIL): return SeqType.BLOCKED_THREE
                 case (3, 2, Block.NO): return SeqType.DOUBLE_HOLED_THREE
@@ -301,7 +313,10 @@ class Sequence:
                 case (4, 0, Block.NO): return SeqType.FOUR
                 case (s, 0, _) if s >= 5: return SeqType.FIVE
                 case _ : return SeqType.DEAD
-        return _type(self.stones, self.nb_holes, self.is_blocked, self.capacity)
+        is_dead = self.capacity < MAX_SEQ_LEN
+        # op_block stands for opponent's block
+        op_block = any(map(lambda c: c.in_range(self.bounds), self.block_cells))
+        return _type(self.stones, self.nb_holes, self.is_blocked, is_dead, op_block)
 
     def __str__(self):
         s = f"Sequence {self.id} (p{self.player}):\n"
@@ -326,6 +341,7 @@ class Sequence:
         return s
 
     def __add__(self, other):
+        self.start = self.end
         self, other = (
             (self, other)
             if self.dir.get_block_dir() == Block.HEAD
@@ -349,3 +365,9 @@ class Sequence:
             return Block.TAIL
         else:
             return Block.NO
+    
+    def filter_in_bounds(self, cells: tuple[Coord]) -> tuple[Coord]:
+        """
+        Returns cells that are not out of range.
+        """
+        return tuple(filter(lambda c: c.in_range(self.bounds), cells))

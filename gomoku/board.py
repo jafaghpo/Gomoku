@@ -2,7 +2,7 @@ from dataclasses import dataclass
 import numpy as np
 from functools import cache
 
-from gomoku.sequence import Sequence, SeqType, Coord, Block, MAX_SEQ_LEN
+from gomoku.sequence import DIR_STR, Sequence, SeqType, Coord, Block, MAX_SEQ_LEN
 
 
 def slice_up(board: np.ndarray, y: int, x: int, size: int) -> tuple[int]:
@@ -84,6 +84,7 @@ class Board:
         self.stones = set()
         self.last_move = None
         self.last_seq_id = 0
+        Sequence.bounds = Coord(*shape)
 
     def __str__(self) -> str:
         player_repr = {0: ".", 1: "X", 2: "O"}
@@ -126,6 +127,7 @@ class Board:
         """
         Remove a sequence from the board.
         """
+        print(f"Removing sequence {id}")
         seq = self.seq_list.pop(id)
         for cell in seq.rest_cells:
             self.seq_map[cell].discard(id)
@@ -133,6 +135,7 @@ class Board:
             self.seq_map[cell].discard(id)
         for cell in seq.block_cells:
             self.seq_map[cell].discard(id)
+        
     
     def add_sequence(self, seq: Sequence) -> None:
         """
@@ -140,6 +143,7 @@ class Board:
         """
         if seq.type == SeqType.DEAD:
             return
+        print(f"Adding sequence {seq.id} (type: {seq.type}, dir: {seq.dir}, start: {seq.start}):")
         if seq.id == -1:
             seq.id = self.last_seq_id
             self.last_seq_id += 1
@@ -155,6 +159,7 @@ class Board:
         """
         Replace a sequence with a new one if valid but keep the same id.
         """
+        print(f"Replacing sequence {id} at {pos}")
         old = self.seq_list[id]
         new = self.get_sequence(pos, old.dir, old.player)
         self.remove_sequence(id)
@@ -168,14 +173,15 @@ class Board:
         """
         if block == Block.NO:
             return
+        print(f"Adding block {block} to sequence {id}")
         seq = self.seq_list[id]
-        seq.is_blocked = block
         index = int(block) - 1
         length = seq.spaces[index]
         if seq.capacity - length < MAX_SEQ_LEN:
             return self.remove_sequence(id)
         for cell in seq.space_cells[index]:
             self.seq_map[cell].discard(id)
+        seq.is_blocked = block
         self.seq_map[pos].add(id)
         
 
@@ -183,6 +189,7 @@ class Board:
         """
         Split a sequence into two sequences.
         """
+        print(f"Splitting sequence {id} at {pos}")
         seq = self.seq_list[id]
         self.remove_sequence(id)
         head = self.get_sequence(seq.start, seq.dir, seq.player)
@@ -200,8 +207,12 @@ class Board:
         """
         visited = set()
         for id in self.seq_map.get(pos, set()).copy():
+            print(f"Updating sequence {id}")
             seq = self.seq_list[id]
-            visited.add(seq.dir)
+            if seq.dir in DIRECTIONS:
+                visited.add(seq.dir)
+            if -seq.dir in DIRECTIONS:
+                visited.add(-seq.dir)
             if seq.player == player:
                 self.replace_sequence(pos, id)
             elif pos in seq.holes:
@@ -225,6 +236,10 @@ class Board:
         self.last_move = pos
         self.update_sequences(pos, player)
         print(self)
+        for seq in self.seq_list.values():
+            if len(seq.rest_cells) != len(seq.filter_in_bounds(seq.rest_cells)):
+                print(f"Invalid sequence {seq.id}")
+
 
     def get_neighbors(self) -> set[Coord]:
         """
@@ -263,7 +278,7 @@ class Board:
                 if holed or cell == player ^ 3:
                     return tuple(shape)
                 holed = True
-        return tuple(shape) if sub_len == 0 else tuple(shape + (sub_len,))
+        return tuple(shape) if sub_len == 0 else tuple(shape) + (sub_len,)
 
     def get_spaces(self, seq: Sequence) -> tuple[int, int]:
         """
