@@ -1,8 +1,11 @@
+from cmath import inf
 from dataclasses import dataclass
 from enum import IntEnum
 from collections import namedtuple
 from functools import cache
+from tkinter.tix import MAX
 from typing import ClassVar
+from functools import reduce
 
 
 MAX_SEQ_LEN = 5
@@ -114,42 +117,6 @@ DIR_STR = {
     Coord(1, 0): "↓ (down)",
     Coord(1, -1): "↙ (down-left)",
 }
-
-
-class SeqType(IntEnum):
-    # x o o o x
-    DEAD = 0
-    # x o - o - -
-    BLOCKED_HOLED_TWO = 300
-    # x o o - - -
-    BOARD_BLOCKED_TWO = 500
-    BLOCKED_TWO = -1000  # negative value because it can be captured by opponent
-    # - o - o - -
-    HOLED_TWO = 1450
-    # - o o - - -
-    TWO = 1500
-    # x o - o - o
-    BLOCKED_DOUBLE_HOLED_THREE = 1550
-    # x o o - o -
-    BLOCKED_HOLED_THREE = 1650
-    # x o o o - -
-    BLOCKED_THREE = 1700
-    # o - o - o
-    DOUBLE_HOLED_THREE = 1800
-    # - o o - o -
-    HOLED_THREE = 4900
-    # - o o o - -
-    THREE = 5000
-    # x o o - o o || x o o o - o
-    BLOCKED_HOLED_FOUR = 9000
-    # x o o o o -
-    BLOCKED_FOUR = 10000
-    # - o o - o o || - o o o - o
-    HOLED_FOUR = 10500
-    # - o o o o -
-    FOUR = 100000
-    # o o o o o
-    FIVE = 2e9
 
 
 @dataclass(slots=True)
@@ -301,58 +268,28 @@ class Sequence:
         return self.capacity < MAX_SEQ_LEN or self.stones < 2
 
     @property
-    def type(self) -> SeqType:
+    def score(self) -> int:
         """
-        Returns the type of the sequence and its value based on the number of stones,
-        the number of holes, and the maximum achievable length of the sequence.
+        Returns the score of the sequence.
         """
-
         @cache
-        def _type(
-            stones: int, holes: int, is_blocked: Block, is_dead: bool, op_block: bool
-        ) -> SeqType:
-            if is_dead:
-                return SeqType.DEAD
-            match (stones, holes, is_blocked):
-                case (2, 1, Block.HEAD | Block.TAIL):
-                    return SeqType.BLOCKED_HOLED_TWO
-                case (2, 0, Block.HEAD | Block.TAIL) if not op_block:
-                    return SeqType.BOARD_BLOCKED_TWO
-                case (2, 0, Block.HEAD | Block.TAIL):
-                    return SeqType.BLOCKED_TWO
-                case (2, 1, Block.NO):
-                    return SeqType.HOLED_TWO
-                case (2, 0, Block.NO):
-                    return SeqType.TWO
-                case (3, 2, Block.HEAD | Block.TAIL):
-                    return SeqType.BLOCKED_DOUBLE_HOLED_THREE
-                case (3, 1, Block.HEAD | Block.TAIL):
-                    return SeqType.BLOCKED_HOLED_THREE
-                case (3, 0, Block.HEAD | Block.TAIL):
-                    return SeqType.BLOCKED_THREE
-                case (3, 2, Block.NO):
-                    return SeqType.DOUBLE_HOLED_THREE
-                case (3, 1, Block.NO):
-                    return SeqType.HOLED_THREE
-                case (3, 0, Block.NO):
-                    return SeqType.THREE
-                case (4, 1, Block.HEAD | Block.TAIL):
-                    return SeqType.BLOCKED_HOLED_FOUR
-                case (4, 0, Block.HEAD | Block.TAIL):
-                    return SeqType.BLOCKED_FOUR
-                case (4, 1, Block.NO):
-                    return SeqType.HOLED_FOUR
-                case (4, 0, Block.NO):
-                    return SeqType.FOUR
-                case (s, 0, _) if s >= 5:
-                    return SeqType.FIVE
-                case _:
-                    return SeqType.DEAD
-
-        is_dead = self.capacity < MAX_SEQ_LEN
-        # op_block stands for opponent's block
-        op_block = any(map(lambda c: c.in_range(self.bounds), self.block_cells))
-        return _type(self.stones, self.nb_holes, self.is_blocked, is_dead, op_block)
+        def _score(shape: tuple[int], penalty: int) -> int:
+            n = 1
+            for seq_len in shape:
+                if seq_len >= MAX_SEQ_LEN:
+                    return 1e9
+                n *= 10 ** seq_len
+            return n // penalty
+        block_penalty = 1 if self.is_blocked == Block.NO else 5
+        hole_penalty = max(1, self.nb_holes * 2)  # or self.nb_holes + 1
+        return _score(self.shape, hole_penalty * block_penalty)
+    
+    @property
+    def is_win(self) -> bool:
+        """
+        Returns True if the sequence is winning.
+        """
+        return max(self.shape) >= MAX_SEQ_LEN
 
     def __str__(self):
         s = f"Sequence {self.id} (p{self.player}):\n"
@@ -366,7 +303,7 @@ class Sequence:
         s += f"  spaces: {self.spaces}\n"
         s += f"  is_blocked: {self.is_blocked.name}\n"
         s += f"  block_cells: {', '.join(map(str, self.block_cells))}\n"
-        s += f"  type: {self.type.name} (score: {self.type})\n"
+        s += f"  score: {self.score}\n"
         s += f"  rest cells: {', '.join(map(str, self.rest_cells))}\n"
         s += f"  cost cells: {', '.join(map(str, self.cost_cells))}\n"
         s += f"  growth cells: {', '.join(map(str, self.growth_cells))}\n"

@@ -398,7 +398,8 @@ class Display:
             self.render_last_move(pos)
             self.update()
             self.board.add_move(pos, self.player_turn + 1)
-
+            if self.board.is_game_over():
+                self.game_over = True
             self.player_turn ^= 1
 
 

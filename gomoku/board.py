@@ -116,6 +116,12 @@ class Board:
         s += "Last move: " + str(self.last_move) + "\n"
         return s
 
+    def is_game_over(self) -> bool:
+        """
+        Check if the game is over.
+        """
+        return any(seq.is_win for seq in self.seq_list.values())
+
     def get_pos_c4(self, x: int):
         for y in range(5, -1, -1):
             if self.cells[y, x] == 0:
