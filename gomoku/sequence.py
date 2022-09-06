@@ -203,20 +203,25 @@ class Sequence:
         return tuple(holes)
 
     @property
+    def block_head(self) -> tuple[Coord]:
+        """
+        Returns the coordinates of the cells that are the head of a block.
+        """
+        return (self.start - self.dir,) if self.is_blocked & Block.HEAD else ()
+
+    @property
+    def block_tail(self) -> tuple[Coord]:
+        """
+        Returns the coordinates of the cells that are the tail of a block.
+        """
+        return (self.end + self.dir,) if self.is_blocked & Block.TAIL else ()
+
+    @property
     def block_cells(self) -> tuple[Coord]:
         """
         Returns the coordinates of the cells that block the sequence.
         """
-        cells = ()
-        if self.is_blocked == Block.NO:
-            return ()
-        elif self.is_blocked == Block.HEAD:
-            cells = (self.start - self.dir,)
-        elif self.is_blocked == Block.TAIL:
-            cells = (self.end + self.dir,)
-        else:
-            cells = (self.start - self.dir, self.end + self.dir)
-        return cells
+        return self.block_head + self.block_tail
 
     @property
     def space_cells(self) -> tuple[tuple[Coord]]:
@@ -272,18 +277,21 @@ class Sequence:
         """
         Returns the score of the sequence.
         """
+
         @cache
         def _score(shape: tuple[int], penalty: int) -> int:
             n = 1
             for seq_len in shape:
                 if seq_len >= MAX_SEQ_LEN:
                     return 1e9
-                n *= 10 ** seq_len
+                n *= 10**seq_len
             return n // penalty
+
         block_penalty = 1 if self.is_blocked == Block.NO else 5
         hole_penalty = max(1, self.nb_holes * 2)  # or self.nb_holes + 1
-        return _score(self.shape, hole_penalty * block_penalty)
-    
+        player = 1 if self.player == 1 else -1
+        return _score(self.shape, hole_penalty * block_penalty) * player
+
     @property
     def is_win(self) -> bool:
         """
@@ -316,8 +324,6 @@ class Sequence:
         return s
 
     def __add__(self, other):
-        if self.start > other.start:
-            self, other = (other, self)
         self.shape = (
             self.shape[:-1] + (self.shape[-1] + other.shape[0] - 1,) + other.shape[1:]
         )
@@ -391,9 +397,10 @@ class Sequence:
             or pos.distance(self.end) <= 2
         )
 
-    def split(self, pos: Coord) -> tuple["Sequence", "Sequence"]:
+    # TODO: fix bug "ValueError: 4 is not a valid Block"
+    def split_block_hole(self, pos: Coord) -> tuple["Sequence", "Sequence"]:
         """
-        Splits the sequence at the given position.
+        Splits the sequence at the position where an enemy stone filled a hole.
         """
         index = self.holes.index(pos)
         return (
@@ -402,15 +409,59 @@ class Sequence:
                 self.shape[: index + 1],
                 self.start,
                 self.dir,
-                Block(self.is_blocked + Block.TAIL),
                 (self.spaces[0], 0),
+                Block(self.is_blocked + Block.TAIL)
+                if self.is_blocked != Block.BOTH
+                else self.is_blocked,
             ),
             Sequence(
                 self.player,
                 self.shape[index + 1 :],
                 pos + self.dir,
                 self.dir,
-                Block(self.is_blocked + Block.HEAD),
-                self.spaces,
+                (0, self.spaces[1]),
+                Block(self.is_blocked + Block.HEAD)
+                if self.is_blocked != Block.BOTH
+                else self.is_blocked,
             ),
         )
+
+    def remove_start(self) -> None:
+        """
+        Removes the stone at the start of the sequence.
+        """
+        start = self.start
+        self.start = self.rest_cells[1]
+        self.shape = (self.shape[0] - 1,) + self.shape[1:]
+        if self.shape[0] == 0:
+            self.shape = self.shape[1:]
+        self.spaces = (self.spaces[0] + self.start.distance(start), self.spaces[1])
+        if self.is_blocked == Block.HEAD or self.is_blocked == Block.BOTH:
+            self.is_blocked = Block(self.is_blocked - Block.HEAD)
+
+    def remove_end(self) -> None:
+        """
+        Removes the stone at the end of the sequence.
+        """
+        end = self.end
+        self.shape = self.shape[:-1] + (self.shape[-1] - 1,)
+        if self.shape[-1] == 0:
+            self.shape = self.shape[:-1]
+        self.spaces = (self.spaces[0], self.spaces[1] + self.end.distance(end))
+        if self.is_blocked == Block.TAIL or self.is_blocked == Block.BOTH:
+            self.is_blocked = Block(self.is_blocked - Block.TAIL)
+
+    def is_blocked_by_opponent(self, block: tuple[Coord]) -> bool:
+        """
+        Returns True if the sequence is blocked by an opponent stone or
+        False if the block is the edge of the board
+        """
+        return block != () and block[0].in_range(self.bounds)
+
+    def capturable_sequence(self) -> bool:
+        """
+        Returns whether the sequence is capturable.
+        """
+        head = self.is_blocked_by_opponent(self.block_head) and self.shape[0] == 2
+        tail = self.is_blocked_by_opponent(self.block_tail) and self.shape[-1] == 2
+        return head or tail

@@ -1,14 +1,13 @@
 from dataclasses import dataclass
 import numpy as np
 from functools import cache
-from sys import exit
 from itertools import takewhile
 
 from gomoku.sequence import Sequence, Coord, Block, MAX_SEQ_LEN
 
 
 def slice_up(board: np.ndarray, y: int, x: int, size: int) -> tuple[int]:
-    return tuple(board[max(y - size - 1, 0) : y + 1, x][::-1])
+    return tuple(board[max(y - size + 1, 0) : y + 1, x][::-1])
 
 
 def slice_down(board: np.ndarray, y: int, x: int, size: int) -> tuple[int]:
@@ -16,7 +15,7 @@ def slice_down(board: np.ndarray, y: int, x: int, size: int) -> tuple[int]:
 
 
 def slice_left(board: np.ndarray, y: int, x: int, size: int) -> tuple[int]:
-    return tuple(board[y, max(x - size - 1, 0) : x + 1][::-1])
+    return tuple(board[y, max(x - size + 1, 0) : x + 1][::-1])
 
 
 def slice_right(board: np.ndarray, y: int, x: int, size: int) -> tuple[int]:
@@ -43,14 +42,14 @@ def slice_down_right(board: np.ndarray, y: int, x: int, size: int) -> tuple[int]
 
 
 SLICE_MAP = {
-    (0, -1): slice_left,
-    (0, 1): slice_right,
-    (-1, 0): slice_up,
-    (1, 0): slice_down,
-    (-1, -1): slice_up_left,
-    (-1, 1): slice_up_right,
-    (1, -1): slice_down_left,
-    (1, 1): slice_down_right,
+    Coord(0, -1): slice_left,
+    Coord(0, 1): slice_right,
+    Coord(-1, 0): slice_up,
+    Coord(1, 0): slice_down,
+    Coord(-1, -1): slice_up_left,
+    Coord(-1, 1): slice_up_right,
+    Coord(1, -1): slice_down_left,
+    Coord(1, 1): slice_down_right,
 }
 
 NEIGHBORS_OFFSET = tuple(
@@ -76,6 +75,10 @@ NEIGHBORS_OFFSET = tuple(
 
 DIRECTIONS = tuple(map(Coord._make, ((0, -1), (-1, -1), (-1, 0), (-1, 1))))
 
+CAPTURE_MOVE_CASES = ((2, 1, 1, 2), (1, 2, 2, 1))
+
+CAPTURE_WIN = 10
+
 
 @dataclass(init=False, repr=True, slots=True)
 class Board:
@@ -89,14 +92,27 @@ class Board:
     last_seq_id: int
     last_move: Coord | None
     stones: set[Coord]
+    capture_count: list[int]
+    captures: bool
+    free_threes: bool
+    last_chance: bool
 
-    def __init__(self, shape: tuple[int, int] = (19, 19)) -> None:
+    def __init__(
+        self,
+        shape: tuple[int, int] = (19, 19),
+        captures: bool = True,
+        free_threes: bool = False,
+    ) -> None:
         self.cells = np.zeros(shape, dtype=int)
         self.seq_map = {}
         self.seq_list = {}
         self.stones = set()
         self.last_move = None
         self.last_seq_id = 0
+        self.capture_count = [0, 0]
+        self.captures = captures
+        self.free_threes = free_threes
+        self.last_chance = False
         Sequence.bounds = Coord(*shape)
 
     def __str__(self) -> str:
@@ -120,7 +136,15 @@ class Board:
         """
         Check if the game is over.
         """
-        return any(seq.is_win for seq in self.seq_list.values())
+        if self.captures and any(c >= CAPTURE_WIN for c in self.capture_count):
+            return True
+        for seq in self.seq_list.values():
+            if seq.is_win and not self.last_chance:
+                if self.capturable_stones_in_sequences(seq):
+                    self.last_chance = True
+                    return False
+                return True
+        return False
 
     def get_pos_c4(self, x: int):
         for y in range(5, -1, -1):
@@ -128,7 +152,6 @@ class Board:
                 return Coord(y, x)
 
     def can_place_c4(self, x: int) -> bool:
-        print(self.cells[(x, 0)])
         return self.cells[(x, 0)] == 0
 
     def can_place(self, pos: Coord) -> bool:
@@ -144,12 +167,12 @@ class Board:
         """
         seq = self.seq_list.pop(id)
         for cell in seq.rest_cells:
-            self.seq_map[cell].discard(id)
+            self.seq_map.get(cell, set()).discard(id)
         for cell in seq.growth_cells:
-            self.seq_map[cell].discard(id)
+            self.seq_map.get(cell, set()).discard(id)
         for cell in seq.block_cells:
             if cell.in_range(self.cells.shape):
-                self.seq_map[cell].discard(id)
+                self.seq_map.get(cell, set()).discard(id)
 
     def remove_sequence_spaces(
         self, pos: Coord, id: int, block: Block, from_list: bool = False
@@ -165,7 +188,7 @@ class Board:
         except ValueError:
             return
         for cell in spaces[start:]:
-            self.seq_map[cell].discard(id)
+            self.seq_map.get(cell, set()).discard(id)
         if from_list:
             seq.spaces = (
                 (start, seq.spaces[1]) if index == 0 else (seq.spaces[0], start)
@@ -246,20 +269,17 @@ class Board:
         if pos.in_range(self.cells.shape):
             self.seq_map.setdefault(pos, set()).add(seq.id)
 
-    def split_sequence(self, pos: Coord, id: int) -> None:
+    def split_at_block_sequence(self, pos: Coord, id: int) -> None:
         """
         Split a sequence into two sequences.
         """
         seq = self.seq_list[id]
+        head, tail = seq.split_block_hole(pos)
         self.remove_sequence(id)
-        head = self.get_sequence(seq.start, seq.dir, seq.player)
-        tail = self.get_sequence(seq.end, seq.dir, seq.player)
-        if not head.is_dead:
-            self.add_sequence(head)
-        if not tail.is_dead:
-            self.add_sequence(tail)
+        self.add_sequence(head)
+        self.add_sequence(tail)
 
-    def update_sequences(self, pos: Coord, player: int) -> None:
+    def add_stone_and_update_sequences(self, pos: Coord, player: int) -> None:
         """
         Update the sequences that are affected by the given position,
         removing sequences that are no longer valid and adding new ones.
@@ -273,7 +293,7 @@ class Board:
                     continue
                 self.extend_sequence(pos, id)
             elif pos in seq.holes:
-                self.split_sequence(pos, id)
+                self.split_at_block_sequence(pos, id)
             elif not pos in seq.cost_cells:
                 block = Block.HEAD if pos < seq.start else Block.TAIL
                 self.remove_sequence_spaces(pos, id, block, from_list=True)
@@ -285,16 +305,141 @@ class Board:
         for d in visited.intersection(DIRECTIONS).symmetric_difference(DIRECTIONS):
             self.add_sequence(self.get_sequence(pos, d, player))
 
-    def add_move(self, pos: Coord, player: int) -> None:
+    def add_move(self, pos: Coord, player: int) -> list[Coord]:
         """
         Adds a move to the board by placing the player's stone id at the given position
         and updating the sequences around the new stone.
         """
+        capturable = []
         self.cells[pos] = player
         self.stones.add(pos)
         self.last_move = pos
-        self.update_sequences(pos, player)
+        if self.captures:
+            capturable = self.capturable_stones(pos, CAPTURE_MOVE_CASES)
+            for stone in capturable:
+                self.cells[stone] = 0
+                self.stones.remove(stone)
+                self.capture_count[player - 1] += 1
+            for stone in capturable:
+                self.remove_stone_and_update_sequences(stone)
+        self.add_stone_and_update_sequences(pos, player)
         print(self)
+        return capturable
+
+    def remove_start_from_sequence(self, pos: Coord, id: int) -> None:
+        """
+        Remove the start of a sequence.
+        """
+        seq = self.seq_list[id]
+        seq.remove_start()
+        if seq.is_dead:
+            return self.remove_sequence(id)
+        self.remove_sequence_spaces(seq.start - seq.dir, id, Block.HEAD)
+        seq.spaces = min(seq.spaces[0], MAX_SEQ_LEN - 1), seq.spaces[1]
+        self.add_sequence_spaces(id)
+
+    def remove_end_from_sequence(self, pos: Coord, id: int) -> None:
+        """
+        Remove the end of a sequence.
+        """
+        seq = self.seq_list[id]
+        seq.remove_end()
+        if seq.is_dead:
+            return self.remove_sequence(id)
+        self.remove_sequence_spaces(seq.end + seq.dir, id, Block.TAIL)
+        seq.spaces = seq.spaces[0], min(seq.spaces[1], MAX_SEQ_LEN - 1)
+        self.add_sequence_spaces(id)
+
+    # USELESS
+    def remove_block_from_sequence(self, pos: Coord, id: int) -> None:
+        """
+        Remove a block from a sequence.
+        """
+        seq = self.seq_list[id]
+        if pos < seq.start:
+            seq.is_blocked = Block(seq.is_blocked - Block.HEAD)
+            space = self.get_spaces(seq.start, -seq.dir, seq.player ^ 3)
+            seq.spaces = space, seq.spaces[1]
+            self.add_sequence_spaces(id)
+        else:
+            seq.is_blocked = Block(seq.is_blocked - Block.TAIL)
+            space = self.get_spaces(seq.end, seq.dir, seq.player ^ 3)
+            seq.spaces = seq.spaces[0], space
+            self.add_sequence_spaces(id)
+
+    def split_sequence(self, id: int) -> None:
+        """
+        Split a sequence into two sequences.
+        """
+        seq = self.seq_list[id]
+        head = self.get_sequence(seq.start, seq.dir, seq.player)
+        tail = self.get_sequence(seq.end, -seq.dir, seq.player)
+        self.remove_sequence(id)
+        if head == tail:
+            head.id = id
+            self.add_sequence(head)
+        else:
+            self.add_sequence(head)
+            self.add_sequence(tail)
+
+    def replace_sequence(self, id: int) -> None:
+        """
+        Replace a sequence with a new sequence.
+        """
+        seq = self.seq_list[id]
+        new = self.get_sequence(seq.start, seq.dir, seq.player)
+        new.id = id
+        self.remove_sequence(id)
+        self.add_sequence(new)
+
+    def find_and_replace_sequences(self, pos: Coord, dir: Coord) -> None:
+        """
+        Find and replace sequences around a removed stone.
+        """
+        board_slice = SLICE_MAP[dir](self.cells, pos.y, pos.x, MAX_SEQ_LEN - 1)
+        dist = self.find_stone(board_slice)
+        if dist is None:
+            return
+        new_pos = pos + dir * dist
+        if new_pos in self.seq_map:
+            for id in self.seq_map.get(new_pos, set()).copy():
+                seq = self.seq_list[id]
+                if seq.dir == dir or seq.dir == -dir:
+                    return self.replace_sequence(id)
+        self.add_sequence(self.get_sequence(new_pos, dir, self.cells[new_pos]))
+
+    def remove_stone_and_update_sequences(self, pos: Coord) -> None:
+        """
+        Removes a stone from the board and updates the sequences around it.
+        """
+        visited = set()
+        for id in self.seq_map.get(pos, set()).copy():
+            seq = self.seq_list[id]
+            if pos == seq.start:
+                self.remove_start_from_sequence(pos, id)
+                visited.add(seq.dir)
+            elif pos == seq.end:
+                self.remove_end_from_sequence(pos, id)
+                visited.add(-seq.dir)
+            elif pos in seq.block_cells:
+                self.replace_sequence(id)
+                visited.add(seq.dir if pos < seq.start else -seq.dir)
+            else:
+                self.split_sequence(id)
+                visited.update((seq.dir, -seq.dir))
+        for d in visited.symmetric_difference(SLICE_MAP.keys()):
+            self.find_and_replace_sequences(pos, d)
+
+    def capturable_stones(self, pos: Coord, cases: tuple[tuple[int]]) -> list[Coord]:
+        """
+        Returns a list of capturable stones from the given position.
+        """
+        capturable = []
+        for dir in SLICE_MAP.keys():
+            board_slice = SLICE_MAP[dir](self.cells, pos.y, pos.x, MAX_SEQ_LEN - 1)
+            if self.capturable_slice(board_slice, cases):
+                capturable.extend([pos + dir, pos + dir + dir])
+        return capturable
 
     def get_neighbors(self) -> set[Coord]:
         """
@@ -306,6 +451,16 @@ class Board:
             neighbors = list(filter(lambda n: self.can_place(n), raw_neighbors))
             children.update(neighbors)
         return children
+
+    @staticmethod
+    @cache
+    def capturable_slice(slice: np.ndarray, cases: tuple[tuple[int]]) -> bool:
+        """
+        Returns True if the given slice contains a capturable sequence.
+        """
+        return any(map(lambda case: np.array_equal(slice, np.array(case)), cases))
+        # case1, case2 = np.array([2, 1, 1, 2]), np.array([1, 2, 2, 1])
+        # return np.array_equal(slice, case1) or np.array_equal(slice, case2)
 
     @staticmethod
     @cache
@@ -334,6 +489,17 @@ class Board:
                     return tuple(shape)
                 holed = True
         return tuple(shape) if sub_len == 0 else tuple(shape) + (sub_len,)
+
+    @staticmethod
+    @cache
+    def find_stone(slice: np.ndarray) -> int | None:
+        """
+        Returns the position of the first stone in the given slice.
+        """
+        for i, cell in enumerate(slice):
+            if cell != 0:
+                return i
+        return None
 
     def get_spaces(self, pos: Coord, dir: Coord, opponent: int) -> int:
         """
@@ -364,4 +530,23 @@ class Board:
         """
         head = self.get_half_sequence(pos, dir, player)
         tail = self.get_half_sequence(pos, -dir, player)
-        return head + tail
+        return head + tail if dir < -dir else tail + head
+
+    def capturable_stones_in_sequences(self, seq: Sequence) -> bool:
+        """
+        Returns whether a sequence can be broken/reduced with a capture
+        """
+        for stone in seq.rest_cells:
+            visited = set()
+            for id in self.seq_map.get(stone, set()).copy():
+                s = self.seq_list[id]
+                if seq.id == id or seq.player != s.player:
+                    continue
+                if s.capturable_sequence():
+                    return True
+                visited.update((s.dir, -s.dir))
+            for d in visited.symmetric_difference(SLICE_MAP.keys()):
+                s = self.get_sequence(stone, d, seq.player)
+                if s.capturable_sequence():
+                    return True
+        return False

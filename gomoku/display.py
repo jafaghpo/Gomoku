@@ -195,6 +195,7 @@ class Display:
         self.board_history = []
         self.player_turn = 0
         self.game_over = False
+        self.captures = True
         self.match_menu = MatchMenu(self)
 
     def render_background(self) -> None:
@@ -396,8 +397,13 @@ class Display:
             self.board_history.append(deepcopy(self.board))
             self.render_cell(pos, self.player_turn)
             self.render_last_move(pos)
+            captures = self.board.add_move(pos, self.player_turn + 1)
+            if self.captures and len(captures) > 0:
+                self.render_background()
+                self.render_board()
+                self.render_all_cells()
+                self.render_last_move(pos)
             self.update()
-            self.board.add_move(pos, self.player_turn + 1)
             if self.board.is_game_over():
                 self.game_over = True
             self.player_turn ^= 1
