@@ -1,11 +1,9 @@
-from cmath import inf
 from dataclasses import dataclass
 from enum import IntEnum
 from collections import namedtuple
 from functools import cache
-from tkinter.tix import MAX
-from typing import ClassVar
-from functools import reduce
+from typing import ClassVar, Iterator
+import copy
 
 
 MAX_SEQ_LEN = 5
@@ -143,18 +141,6 @@ class Sequence:
     bounds: ClassVar[Coord] = Coord(19, 19)
 
     @property
-    def stones(self) -> int:
-        """
-        Returns the number of stones in the sequence.
-        """
-
-        @cache
-        def _stones(shape):
-            return sum(shape)
-
-        return _stones(self.shape)
-
-    @property
     def nb_holes(self) -> int:
         """
         Returns the number of holes in the sequence.
@@ -171,7 +157,7 @@ class Sequence:
         """
         Returns the length of the sequence including the empty cells inside.
         """
-        return self.stones + self.nb_holes
+        return len(self) + self.nb_holes
 
     @property
     def capacity(self) -> int:
@@ -270,7 +256,7 @@ class Sequence:
         """
         Returns True if the sequence cannot win.
         """
-        return self.capacity < MAX_SEQ_LEN or self.stones < 2
+        return self.capacity < MAX_SEQ_LEN or len(self) < 2
 
     @property
     def score(self) -> int:
@@ -301,7 +287,7 @@ class Sequence:
 
     def __str__(self):
         s = f"Sequence {self.id} (p{self.player}):\n"
-        s += f"  stone count: {self.stones}\n"
+        s += f"  stone count: {len(self)}\n"
         s += f"  length (including spaces): {self.length}\n"
         s += f"  capacity: {self.capacity}\n"
         s += f"  shape: {self.shape}\n"
@@ -330,6 +316,47 @@ class Sequence:
         self.is_blocked = Block(self.is_blocked + other.is_blocked)
         self.spaces = (self.spaces, other.spaces)
         return self
+
+    def __hash__(self) -> int:
+        return hash(
+            (
+                self.player,
+                self.shape,
+                self.start,
+                self.dir,
+                self.spaces,
+                self.is_blocked,
+            )
+        )
+
+    def __eq__(self, other) -> bool:
+        return (
+            self.player == other.player
+            and self.shape == other.shape
+            and self.start == other.start
+            and self.dir == other.dir
+            and self.spaces == other.spaces
+            and self.is_blocked == other.is_blocked
+        )
+
+    def __lt__(self, other) -> bool:
+        return self.score < other.score
+
+    def __len__(self) -> int:
+        @cache
+        def _stones(shape):
+            return sum(shape)
+
+        return _stones(self.shape)
+
+    def __contains__(self, coord: Coord) -> bool:
+        return coord in self.rest_cells
+
+    def __iter__(self) -> Iterator[Coord]:
+        return iter(self.rest_cells)
+
+    def copy(self) -> "Sequence":
+        return copy.copy(self)
 
     def can_pos_block(self, pos: Coord) -> Block:
         """
@@ -397,7 +424,6 @@ class Sequence:
             or pos.distance(self.end) <= 2
         )
 
-    # TODO: fix bug "ValueError: 4 is not a valid Block"
     def split_block_hole(self, pos: Coord) -> tuple["Sequence", "Sequence"]:
         """
         Splits the sequence at the position where an enemy stone filled a hole.
@@ -410,9 +436,7 @@ class Sequence:
                 self.start,
                 self.dir,
                 (self.spaces[0], 0),
-                Block(self.is_blocked + Block.TAIL)
-                if self.is_blocked != Block.BOTH
-                else self.is_blocked,
+                Block(self.is_blocked & Block.HEAD + Block.TAIL),
             ),
             Sequence(
                 self.player,
@@ -420,9 +444,7 @@ class Sequence:
                 pos + self.dir,
                 self.dir,
                 (0, self.spaces[1]),
-                Block(self.is_blocked + Block.HEAD)
-                if self.is_blocked != Block.BOTH
-                else self.is_blocked,
+                Block(self.is_blocked & Block.TAIL + Block.HEAD),
             ),
         )
 
