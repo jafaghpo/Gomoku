@@ -7,7 +7,7 @@ import copy
 
 
 MAX_SEQ_LEN = 5
-
+MAX_SCORE = 1e9
 
 class Block(IntEnum):
     """
@@ -269,7 +269,7 @@ class Sequence:
             n = 1
             for seq_len in shape:
                 if seq_len >= MAX_SEQ_LEN:
-                    return 1e9
+                    return MAX_SCORE
                 n *= 10**seq_len
             return n // penalty
 

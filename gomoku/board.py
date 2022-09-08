@@ -3,7 +3,7 @@ import numpy as np
 from functools import cache
 from itertools import takewhile
 
-from gomoku.sequence import Sequence, Coord, Block, MAX_SEQ_LEN
+from gomoku.sequence import Sequence, Coord, Block, MAX_SEQ_LEN, MAX_SCORE
 
 
 def slice_up(board: np.ndarray, y: int, x: int, size: int) -> tuple[int]:
@@ -77,7 +77,12 @@ DIRECTIONS = tuple(map(Coord._make, ((0, -1), (-1, -1), (-1, 0), (-1, 1))))
 
 CAPTURE_MOVE_CASES = ((2, 1, 1, 2), (1, 2, 2, 1))
 
-CAPTURE_WIN = 10
+CAPTURE_WIN = 5
+
+# Score ratio of capture compared to sequence
+CAPTURE_EFFICIENTY = 0.5
+
+NEXT_TURN_SCORE_MULTIPLIER = 2
 
 
 @dataclass(init=False, repr=True, slots=True)
@@ -96,6 +101,7 @@ class Board:
     captures: bool
     free_threes: bool
     last_chance: bool
+    playing: int
 
     def __init__(
         self,
@@ -113,6 +119,7 @@ class Board:
         self.captures = captures
         self.free_threes = free_threes
         self.last_chance = False
+        self.playing = 1
         Sequence.bounds = Coord(*shape)
 
     def __str__(self) -> str:
@@ -128,9 +135,39 @@ class Board:
         for cell, seq_ids in self.seq_map.items():
             if seq_ids:
                 s += f"{cell}: {seq_ids}\n"
-        s += "Last sequence id: " + str(self.last_seq_id) + "\n"
-        s += "Last move: " + str(self.last_move) + "\n"
+        s += f"Static Evaluation: {self.score}\n"
+        s += f"Last sequence id: {self.last_seq_id}\n"
+        s += f"Last move: {self.last_move}\n"
         return s
+    
+    @property
+    def capture_score(self) -> list[int]:
+        """
+        Score of captures
+        """
+        x = max(MAX_SEQ_LEN - CAPTURE_WIN, 0)
+        p1, p2 = self.capture_count
+        p1_score = (10**(p1 + x) - 1) // CAPTURE_EFFICIENTY
+        p2_score = (-10**(p2 + x) + 1) // CAPTURE_EFFICIENTY
+        if p1 >= CAPTURE_WIN:
+            return [MAX_SCORE, p2_score]
+        elif p2 >= CAPTURE_WIN:
+            return [p1_score, -MAX_SCORE]
+        return [p1_score, p2_score]
+
+
+    @property
+    def score(self) -> int:
+        """
+        Static evaluation of the board
+        """
+        score = [0, 0]
+        for seq in self.seq_list.values():
+            score[seq.player - 1] += seq.score
+        score = np.add(score, self.capture_score).tolist()
+        score[(self.playing ^ 3) - 1] *= NEXT_TURN_SCORE_MULTIPLIER
+        return sum(score)
+
 
     def is_game_over(self) -> bool:
         """
@@ -327,11 +364,12 @@ class Board:
             for stone in capturable:
                 self.cells[stone] = 0
                 self.stones.remove(stone)
-                self.capture_count[player - 1] += 1
+            self.capture_count[player - 1] += len(capturable) // 2
             for stone in capturable:
                 self.update_sequences_at_removed_stone(stone)
         self.update_sequences_at_added_stone(pos, player)
         print(self)
+        self.playing = player ^ 3
         return capturable
 
     def reduce_sequence_head(self, pos: Coord, id: int) -> None:
