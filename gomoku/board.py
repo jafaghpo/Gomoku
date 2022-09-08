@@ -198,7 +198,7 @@ class Board:
 
     def add_sequence(self, seq: Sequence) -> None:
         """
-        Add a sequence to the board.
+        Add a new sequence to the sequence map and list.
         """
         if seq.is_dead:
             return
@@ -275,21 +275,20 @@ class Board:
         if pos.in_range(self.cells.shape):
             self.seq_map.setdefault(pos, set()).add(seq.id)
 
-    def split_at_block_sequence(self, pos: Coord, id: int) -> None:
+    def split_sequence_at_block(self, pos: Coord, id: int) -> None:
         """
-        Split a sequence into two sequences.
+        Split a sequence into two sequences after an opponent block in the sequence.
         """
         print(f"Splitting sequence {id} at {pos}")
         seq = self.seq_list[id]
-        head, tail = seq.split_block_hole(pos)
+        head, tail = seq.split_at_blocked_hole(pos)
         self.remove_sequence(id)
         self.add_sequence(head)
         self.add_sequence(tail)
 
-    def add_stone_and_update_sequences(self, pos: Coord, player: int) -> None:
+    def update_sequences_at_added_stone(self, pos: Coord, player: int) -> None:
         """
-        Update the sequences that are affected by the given position,
-        removing sequences that are no longer valid and adding new ones.
+        Update sequences at the position of a newly added stone.
         """
         print(f"Adding stone at {pos} for player {player}")
         visited = set()
@@ -301,14 +300,14 @@ class Board:
                     continue
                 self.extend_sequence(pos, id)
             elif pos in seq.holes:
-                self.split_at_block_sequence(pos, id)
+                self.split_sequence_at_block(pos, id)
             elif not pos in seq.cost_cells:
                 block = Block.HEAD if pos < seq.start else Block.TAIL
                 self.remove_sequence_spaces(pos, id, block, from_list=True)
                 if seq.capacity < MAX_SEQ_LEN:
                     self.remove_sequence(id)
             else:
-                block = seq.can_pos_block(pos)
+                block = seq.is_block(pos)
                 self.add_block_to_sequence(pos, id, block, to_list=True)
         for d in visited.intersection(DIRECTIONS).symmetric_difference(DIRECTIONS):
             self.add_sequence(self.get_sequence(pos, d, player))
@@ -330,18 +329,18 @@ class Board:
                 self.stones.remove(stone)
                 self.capture_count[player - 1] += 1
             for stone in capturable:
-                self.remove_stone_and_update_sequences(stone)
-        self.add_stone_and_update_sequences(pos, player)
+                self.update_sequences_at_removed_stone(stone)
+        self.update_sequences_at_added_stone(pos, player)
         print(self)
         return capturable
 
-    def remove_start_from_sequence(self, pos: Coord, id: int) -> None:
+    def reduce_sequence_head(self, pos: Coord, id: int) -> None:
         """
         Remove the start of a sequence.
         """
-        print(f"Removing start of sequence {id} at {pos}")
+        print(f"Reducing sequence {id} head at {pos}")
         tmp_seq = self.seq_list[id]
-        tmp_seq.remove_start()
+        tmp_seq.reduce_head()
         if tmp_seq.is_dead:
             return self.remove_sequence(id)
         self.seq_list[id] = tmp_seq
@@ -350,13 +349,13 @@ class Board:
         seq.spaces = min(seq.spaces[0], MAX_SEQ_LEN - 1), seq.spaces[1]
         self.add_sequence_spaces(id)
 
-    def remove_end_from_sequence(self, pos: Coord, id: int) -> None:
+    def reduce_sequence_tail(self, pos: Coord, id: int) -> None:
         """
         Remove the end of a sequence.
         """
-        print(f"Removing end of sequence {id} at {pos}")
+        print(f"Reducing sequence {id} tail at {pos}")
         tmp_seq = self.seq_list[id].copy()
-        tmp_seq.remove_end()
+        tmp_seq.reduce_tail()
         if tmp_seq.is_dead:
             return self.remove_sequence(id)
         self.seq_list[id] = tmp_seq
@@ -365,11 +364,11 @@ class Board:
         seq.spaces = seq.spaces[0], min(seq.spaces[1], MAX_SEQ_LEN - 1)
         self.add_sequence_spaces(id)
 
-    def split_sequence(self, id: int) -> None:
+    def split_sequence_at_removed_stone(self, id: int) -> None:
         """
-        Split a sequence into two sequences.
+        Split a sequence into two sequences after a removed stone in the sequence.
         """
-        print(f"Splitting sequence {id}")
+        print(f"Splitting sequence {id} at removed stone")
         seq = self.seq_list[id]
         stones = filter(lambda x: self.cells[x] == seq.player, seq.rest_cells)
         seq_list = set(self.get_sequence(s, seq.dir, seq.player) for s in stones)
@@ -390,7 +389,7 @@ class Board:
 
     def find_and_replace_sequences(self, pos: Coord, dir: Coord) -> None:
         """
-        Find and replace sequences around a removed stone.
+        Find a stone in the given direction and replace the sequences at the stone
         """
         print(f"Finding and replacing sequences around {pos} with direction {dir}")
         board_slice = SLICE_MAP[dir](self.cells, pos.y, pos.x, MAX_SEQ_LEN - 1)
@@ -404,25 +403,25 @@ class Board:
                 return self.replace_sequence(id)
         self.add_sequence(self.get_sequence(new_pos, dir, self.cells[new_pos]))
 
-    def remove_stone_and_update_sequences(self, pos: Coord) -> None:
+    def update_sequences_at_removed_stone(self, pos: Coord) -> None:
         """
-        Removes a stone from the board and updates the sequences around it.
+        Updates the sequences affected by the removal of a stone at the given position.
         """
         print(f"Removing stone and updating sequences at {pos}")
         visited = set()
         for id in self.seq_map.get(pos, set()).copy():
             seq = self.seq_list[id]
             if pos == seq.start:
-                self.remove_start_from_sequence(pos, id)
+                self.reduce_sequence_head(pos, id)
                 visited.add(seq.dir)
             elif pos == seq.end:
-                self.remove_end_from_sequence(pos, id)
+                self.reduce_sequence_tail(pos, id)
                 visited.add(-seq.dir)
             elif pos in seq.block_cells:
                 self.replace_sequence(id)
                 visited.add(seq.dir if pos < seq.start else -seq.dir)
             else:
-                self.split_sequence(id)
+                self.split_sequence_at_removed_stone(id)
                 visited.update((seq.dir, -seq.dir))
         for d in visited.symmetric_difference(SLICE_MAP.keys()):
             self.find_and_replace_sequences(pos, d)
@@ -512,8 +511,8 @@ class Board:
         shape = self.slice_to_shape(board_slice)
         seq = Sequence(player, shape, pos, dir)
         seq.spaces = self.get_spaces(seq.end, seq.dir, seq.player ^ 3)
-        seq.is_blocked = Block.NO if seq.spaces != 0 else seq.dir.get_block_dir()
-        if seq.dir.get_block_dir() == Block.HEAD:
+        seq.is_blocked = Block.NO if seq.spaces != 0 else seq.dir.to_block()
+        if seq.dir.to_block() == Block.HEAD:
             seq.start = seq.end
             seq.shape = seq.shape[::-1]
             seq.dir = -seq.dir

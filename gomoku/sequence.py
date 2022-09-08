@@ -67,7 +67,7 @@ class Coord(namedtuple("Coord", "y x")):
         for i in range(0, len, step):
             yield self + dir * i
 
-    def range2d(self, dir, shape, step2d=1, step1d=1):
+    def range_with_shape(self, dir, shape, step2d=1, step1d=1):
         """
         Takes a shape (length of subsequences separated by an empty cell) and gets
         the range of Coords for each len in shape while skipping cells in between.
@@ -94,7 +94,7 @@ class Coord(namedtuple("Coord", "y x")):
             case _:
                 return False
 
-    def get_block_dir(self) -> Block:
+    def to_block(self) -> Block:
         """
         Depending on the direction (from top to bottom or bottom to top),
         returns the type of block
@@ -232,7 +232,7 @@ class Sequence:
         """
         Returns the coordinates of the stones in the sequence.
         """
-        return tuple(self.start.range2d(self.dir, self.shape))
+        return tuple(self.start.range_with_shape(self.dir, self.shape))
 
     @property
     def cost_cells(self) -> tuple[Coord]:
@@ -358,7 +358,7 @@ class Sequence:
     def copy(self) -> "Sequence":
         return copy.copy(self)
 
-    def can_pos_block(self, pos: Coord) -> Block:
+    def is_block(self, pos: Coord) -> Block:
         """
         Returns a Block type depending on whether the given position can block
         the sequence if an opponent stone is placed there.
@@ -424,7 +424,7 @@ class Sequence:
             or pos.distance(self.end) <= 2
         )
 
-    def split_block_hole(self, pos: Coord) -> tuple["Sequence", "Sequence"]:
+    def split_at_blocked_hole(self, pos: Coord) -> tuple["Sequence", "Sequence"]:
         """
         Splits the sequence at the position where an enemy stone filled a hole.
         """
@@ -448,9 +448,9 @@ class Sequence:
             ),
         )
 
-    def remove_start(self) -> None:
+    def reduce_head(self) -> None:
         """
-        Removes the stone at the start of the sequence.
+        Reduces sequence head by one cell.
         """
         start = self.start
         self.start = self.rest_cells[1]
@@ -461,9 +461,9 @@ class Sequence:
         if self.is_blocked == Block.HEAD or self.is_blocked == Block.BOTH:
             self.is_blocked = Block(self.is_blocked - Block.HEAD)
 
-    def remove_end(self) -> None:
+    def reduce_tail(self) -> None:
         """
-        Removes the stone at the end of the sequence.
+        Reduces sequence tail by one cell.
         """
         end = self.end
         self.shape = self.shape[:-1] + (self.shape[-1] - 1,)
@@ -473,17 +473,14 @@ class Sequence:
         if self.is_blocked == Block.TAIL or self.is_blocked == Block.BOTH:
             self.is_blocked = Block(self.is_blocked - Block.TAIL)
 
-    def is_blocked_by_opponent(self, block: tuple[Coord]) -> bool:
-        """
-        Returns True if the sequence is blocked by an opponent stone or
-        False if the block is the edge of the board
-        """
-        return block != () and block[0].in_range(self.bounds)
-
     def capturable_sequence(self) -> bool:
         """
         Returns whether the sequence is capturable.
         """
-        head = self.is_blocked_by_opponent(self.block_head) and self.shape[0] == 2
-        tail = self.is_blocked_by_opponent(self.block_tail) and self.shape[-1] == 2
+
+        def is_blocked_by_opponent(block: tuple[Coord]) -> bool:
+            return block != () and block[0].in_range(self.bounds)
+
+        head = is_blocked_by_opponent(self.block_head) and self.shape[0] == 2
+        tail = is_blocked_by_opponent(self.block_tail) and self.shape[-1] == 2
         return head or tail
