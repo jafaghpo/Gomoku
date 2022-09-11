@@ -152,9 +152,7 @@ class GameMenu:
         self.player2_type = selected[1]
 
     def on_start(self):
-        self.display.args.players = [self.player1_type, self.player2_type]
-        print("final args:")
-        print(self.display.args)
+        self.display.args.players = {1: self.player1_type, -1: self.player2_type}
         self.display.screen = pygame.display.set_mode(
             (self.display.screen_size, self.display.screen_size)
         )
@@ -171,29 +169,28 @@ class Display:
         print(self.args)
         self.screen_size = BASE_SIZE + (args.size - 1) * CELL_SIZE
         if self.args.connect4:
-            print("wsh")
             self.args.players = ["human", "human"]
             self.args.size = 7
             self.background = pygame.image.load(f"{TEXT_PATH}/connect4_background.png")
             self.screen = pygame.display.set_mode((1920, 1200))
             pygame.display.set_caption("Connect4")
-            self.stone_text = (
-                f"{TEXT_PATH}/c4_red.png",
-                f"{TEXT_PATH}/c4_yellow.png",
-            )
+            self.stone_text = {
+                1: f"{TEXT_PATH}/c4_red.png",
+                -1: f"{TEXT_PATH}/c4_yellow.png",
+            }
         else:
             self.background = pygame.image.load(f"{TEXT_PATH}/classic_background.png")
             self.screen = pygame.display.set_mode((self.screen_size, self.screen_size))
             pygame.display.set_caption("Gomoku")
-            self.stone_text = (
-                f"{TEXT_PATH}/classic_black_stone.png",
-                f"{TEXT_PATH}/classic_white_stone.png",
-                f"{TEXT_PATH}/classic_help_stone.png",
-            )
+            self.stone_text = {
+                0: f"{TEXT_PATH}/classic_help_stone.png",
+                1: f"{TEXT_PATH}/classic_black_stone.png",
+                -1: f"{TEXT_PATH}/classic_white_stone.png",
+            }
 
         self.board = None
         self.board_history = []
-        self.player_turn = 0
+        self.player_turn = 1
         self.game_over = False
         self.captures = True
         self.match_menu = MatchMenu(self)
@@ -271,14 +268,13 @@ class Display:
         indexes = np.argwhere(self.board.cells != 0)
         for index in indexes:
             y, x = index
-
-            self.render_cell(Coord(y, x), self.board.cells[y][x] - 1)
+            self.render_cell(Coord(y, x), self.board.cells[y][x])
 
     def render_last_move(self, pos: Coord) -> None:
         if self.args.connect4 == False:
             if self.board.last_move:
                 self.render_cell(
-                    self.board.last_move, self.board.cells[self.board.last_move] - 1
+                    self.board.last_move, self.board.cells[self.board.last_move]
                 )
 
             rect_size = CELL_SIZE // 6
@@ -294,8 +290,7 @@ class Display:
             )
 
     def render_help_move(self, pos: Coord) -> None:
-        print(self.stone_text[2])
-        stone = pygame.image.load(self.stone_text[2])
+        stone = pygame.image.load(self.stone_text[0])
         stone = pygame.transform.scale(stone, (CELL_SIZE * 0.9, CELL_SIZE * 0.9))
         self.screen.blit(
             stone,
@@ -327,7 +322,7 @@ class Display:
             self.board_history = []
             self.render_background()
             self.render_board()
-            self.player_turn = 0
+            self.player_turn = 1
         else:
             self.board_history.pop()
             self.board = self.board_history.pop()
@@ -362,7 +357,6 @@ class Display:
         if self.board.last_move:
             self.render_last_move(self.board.last_move)
         self.update()
-        player_type = self.args.players
         total_time = 0
         had_help = 0
         while True:
@@ -370,13 +364,16 @@ class Display:
             pos = self.handle_event()
             if self.game_over:
                 continue
-            if player_type[self.player_turn] == "human":
+            if self.args.players[self.player_turn] == "human":
                 if self.args.helpmove:
                     if had_help == 0:
                         self.render_help_move(dumb_algo(self.board))
                         self.update()
                         had_help = 1
-                if not pos:
+                if not pos or (
+                    self.board.free_threes
+                    and self.board.is_double_free_three(pos, self.player_turn)
+                ):
                     continue
             else:
                 had_help = 0
@@ -394,21 +391,25 @@ class Display:
                 font = pygame.font.SysFont(None, 24)
                 img = font.render(f"{total_time:.4f}", True, (0, 0, 0))
                 self.screen.blit(img, (10, 10))
+            move_msg = f"Move {max(len(self.board_history) // 2, 0)}: "
             self.board_history.append(deepcopy(self.board))
             self.render_cell(pos, self.player_turn)
             self.render_last_move(pos)
-            captures = self.board.add_move(pos, self.player_turn + 1)
+            captures = self.board.add_move(pos, self.player_turn)
+            move_msg += f"Player {self.player_turn if self.player_turn == 1 else 2} "
+            move_msg += f"placed a stone at {pos}"
             if self.captures and len(captures) > 0:
+                move_msg += f" and captured {len(captures)} enemy stones\n"
+                move_msg += f"Capture count: "
+                move_msg += f"[{self.board.capture[1]}, {self.board.capture[-1]}]"
                 self.render_background()
                 self.render_board()
                 self.render_all_cells()
                 self.render_last_move(pos)
+            print(move_msg)
             self.update()
-            if self.board.is_game_over():
+            winner = self.board.is_game_over()
+            if winner:
                 self.game_over = True
-            self.player_turn ^= 1
-
-
-# TODO:
-# - set a min/max size for the board (the background texture doesn't fit after size 24)
-# - fix the fact that every mouse button press creates a move
+                print(f"Game over! Winner is Player {winner if winner != 1 else 2}")
+            self.player_turn *= -1

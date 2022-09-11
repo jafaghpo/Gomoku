@@ -7,7 +7,11 @@ import copy
 
 
 MAX_SEQ_LEN = 5
-MAX_SCORE = 1e9
+MAX_SCORE = 1e12
+BASE_SCORE = 10
+BLOCK_PENALTY = 4
+CAPTURE_WIN = 5
+
 
 class Block(IntEnum):
     """
@@ -139,6 +143,7 @@ class Sequence:
     id: int = -1
 
     bounds: ClassVar[Coord] = Coord(19, 19)
+    capture: ClassVar[list[int] | None] = None
 
     @property
     def nb_holes(self) -> int:
@@ -235,21 +240,21 @@ class Sequence:
         return tuple(self.start.range_with_shape(self.dir, self.shape))
 
     @property
+    def flank_cells(self) -> tuple[Coord]:
+        """
+        Returns the coordinates of the cells that flank the sequence.
+        """
+        return self.filter_in_bounds((self.start - self.dir, self.end + self.dir))
+
+    @property
     def cost_cells(self) -> tuple[Coord]:
         """
         Returns the coordinates of the cells that directly impact
         the growth of the sequence, meaning the holes and the flanking cells.
         """
-        cells = self.holes
-        if self.length >= MAX_SEQ_LEN:
-            return self.filter_in_bounds(cells)
-        elif self.is_blocked == Block.NO:
-            cells += (self.start - self.dir, self.end + self.dir)
-        elif self.is_blocked == Block.HEAD:
-            cells += (self.end + self.dir,)
-        elif self.is_blocked == Block.TAIL:
-            cells += (self.start - self.dir,)
-        return self.filter_in_bounds(cells)
+        end = min(max(MAX_SEQ_LEN - self.length - self.nb_holes, 0), 2)
+        head, tail = self.space_cells
+        return self.filter_in_bounds(self.holes + head[:end] + tail[:end])
 
     @property
     def is_dead(self) -> bool:
@@ -259,34 +264,33 @@ class Sequence:
         return self.capacity < MAX_SEQ_LEN or len(self) < 2
 
     @property
-    def score(self) -> int:
-        """
-        Returns the score of the sequence.
-        """
-
-        @cache
-        def _score(shape: tuple[int], penalty: int) -> int:
-            n = 1
-            for seq_len in shape:
-                if seq_len >= MAX_SEQ_LEN:
-                    return MAX_SCORE
-                n *= 10**seq_len
-            return n // penalty
-
-        block_penalty = 1 if self.is_blocked == Block.NO else 5
-        hole_penalty = max(1, self.nb_holes * 2)  # or self.nb_holes + 1
-        player = 1 if self.player == 1 else -1
-        return _score(self.shape, hole_penalty * block_penalty) * player
-
-    @property
     def is_win(self) -> bool:
         """
         Returns True if the sequence is winning.
         """
         return max(self.shape) >= MAX_SEQ_LEN
 
+    @property
+    def score(self) -> int:
+        """
+        Returns the score of the sequence.
+        """
+
+        @cache
+        def _score(shape: tuple[int], base: int) -> int:
+            n = 1
+            for seq_len in shape:
+                n *= base**seq_len
+            return n
+
+        if self.is_win:
+            return MAX_SCORE * self.player
+        block_penalty = BLOCK_PENALTY if self.is_blocked != Block.NO else 0
+        base = BASE_SCORE - self.nb_holes - block_penalty
+        return _score(self.shape, base) * self.player
+
     def __str__(self):
-        s = f"Sequence {self.id} (p{self.player}):\n"
+        s = f"Sequence {self.id} (p{self.player if self.player == 1 else 2}):\n"
         s += f"  stone count: {len(self)}\n"
         s += f"  length (including spaces): {self.length}\n"
         s += f"  capacity: {self.capacity}\n"
@@ -297,10 +301,10 @@ class Sequence:
         s += f"  spaces: {self.spaces}\n"
         s += f"  is_blocked: {self.is_blocked.name}\n"
         s += f"  block_cells: {', '.join(map(str, self.block_cells))}\n"
-        s += f"  score: {self.score}\n"
         s += f"  rest cells: {', '.join(map(str, self.rest_cells))}\n"
         s += f"  cost cells: {', '.join(map(str, self.cost_cells))}\n"
         s += f"  growth cells: {', '.join(map(str, self.growth_cells))}\n"
+        s += f"  score: {self.score}\n"
         return s
 
     def __repr__(self):

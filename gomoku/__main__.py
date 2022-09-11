@@ -47,6 +47,7 @@ def parse_args(argv: list[str]) -> Namespace:
 
 def main() -> None:
     args = parse_args(argv[1:])
+    args.players = {1: args.players[0], -1: args.players[1]}
     display = Display(args)
     if len(argv) == 1:
         game_menu = GameMenu(display)
