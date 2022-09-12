@@ -291,20 +291,16 @@ class Sequence:
 
     def __str__(self):
         s = f"Sequence {self.id} (p{self.player if self.player == 1 else 2}):\n"
-        s += f"  stone count: {len(self)}\n"
-        s += f"  length (including spaces): {self.length}\n"
-        s += f"  capacity: {self.capacity}\n"
         s += f"  shape: {self.shape}\n"
-        s += f"  start: {self.start}\n"
-        s += f"  end: {self.end}\n"
-        s += f"  direction: {DIR_STR[self.dir]}\n"
         s += f"  spaces: {self.spaces}\n"
-        s += f"  is_blocked: {self.is_blocked.name}\n"
-        s += f"  block_cells: {', '.join(map(str, self.block_cells))}\n"
+        s += f"  direction: {DIR_STR[self.dir]}\n"
+        s += f"  score: {self.score}\n"
+        s += f"  is blocked: {self.is_blocked.name}\n"
+        if self.is_blocked != Block.NO:
+            s += f"  block cells: {', '.join(map(str, self.block_cells))}\n"
         s += f"  rest cells: {', '.join(map(str, self.rest_cells))}\n"
         s += f"  cost cells: {', '.join(map(str, self.cost_cells))}\n"
         s += f"  growth cells: {', '.join(map(str, self.growth_cells))}\n"
-        s += f"  score: {self.score}\n"
         return s
 
     def __repr__(self):

@@ -5,7 +5,6 @@ import pygame_menu
 import numpy as np
 import sys
 import time
-from random import randint as rand
 from copy import deepcopy
 from gomoku.board import Board, Coord
 from gomoku.engine import dumb_algo
