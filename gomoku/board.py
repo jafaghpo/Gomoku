@@ -2,8 +2,17 @@ from dataclasses import dataclass
 import numpy as np
 from functools import cache
 from itertools import takewhile
+from typing import ClassVar
 
-from gomoku.sequence import Sequence, Coord, Block, MAX_SEQ_LEN, MAX_SCORE, CAPTURE_WIN
+from gomoku.sequence import (
+    Sequence,
+    Coord,
+    Block,
+    SEQUENCE_WIN,
+    MAX_SCORE,
+    CAPTURE_WIN,
+    DELTA_WIN,
+)
 
 
 def slice_up(board: np.ndarray, y: int, x: int, size: int) -> tuple[int]:
@@ -78,12 +87,10 @@ DIRECTIONS = tuple(map(Coord._make, ((0, -1), (-1, -1), (-1, 0), (-1, 1))))
 CAPTURE_MOVE_CASES = ((-1, 1, 1, -1), (1, -1, -1, 1))
 
 # Score ratio of capture compared to sequence
-CAPTURE_EFFICIENTY = 0.5
-
-CELL_SCORE = None
+BASE_CAPTURE_SCORE = 5
 
 
-def cell_values(shape: tuple[int, int]) -> np.ndarray:
+def get_cell_values(shape: tuple[int, int]) -> np.ndarray:
     array = np.zeros((shape[0], shape[1]), dtype=int)
     for y in range(shape[0] // 2 + 1):
         for x in range(shape[1] // 2 + 1):
@@ -110,6 +117,8 @@ class Board:
     last_chance: bool
     playing: int
 
+    cell_values: ClassVar[np.ndarray] = None
+
     def __init__(
         self,
         shape: tuple[int, int] = (19, 19),
@@ -126,8 +135,9 @@ class Board:
         self.free_threes = free_threes
         self.last_chance = False
         self.playing = 1
+
         Sequence.bounds = Coord(*shape)
-        CELL_SCORE = cell_values(shape)
+        Board.cell_values = get_cell_values(shape)
 
     def __str__(self) -> str:
         player_repr = {0: ".", 1: "X", -1: "O"}
@@ -142,35 +152,53 @@ class Board:
         for cell, seq_ids in self.seq_map.items():
             if seq_ids:
                 s += f"{cell}: {seq_ids}\n"
-        s += f"Static Evaluation: {self.score}\n"
+        s += f"Static Evaluation: {self.score} "
+        s += f"(Sequences: {self.sequences_score}, Stones: {self.stones_score}, "
+        s += f"Capture: {self.capture_score})\n"
         s += f"Last sequence id: {self.last_seq_id}\n"
         s += f"Last move: {self.last_move}\n"
         return s
 
     @property
-    def capture_score(self) -> list[int]:
+    def capture_score(self) -> int:
         """
         Score of capture
         """
-        x = max(MAX_SEQ_LEN - CAPTURE_WIN, 0)
+        if not self.capture or (self.capture[1] == 0 and self.capture[-1] == 0):
+            return 0
+        x = max(DELTA_WIN, 0)
         p1, p2 = self.capture
-        p1_score = (10 ** (p1 + x) - 1) // CAPTURE_EFFICIENTY
-        p2_score = (-(10 ** (p2 + x)) + 1) // CAPTURE_EFFICIENTY
+        p1_score = BASE_CAPTURE_SCORE ** (p1 + x) - 1
+        p2_score = -(BASE_CAPTURE_SCORE ** (p2 + x)) + 1
         if p1 >= CAPTURE_WIN:
-            return [MAX_SCORE, p2_score]
+            return int(MAX_SCORE)
         elif p2 >= CAPTURE_WIN:
-            return [p1_score, -MAX_SCORE]
-        return [p1_score, p2_score]
+            return int(-MAX_SCORE)
+        return int(p1_score + p2_score)
+
+    @property
+    def stones_score(self) -> int:
+        """
+        Score of all stones on the board
+        """
+        return sum(self.cell_values[coord] * self.cells[coord] for coord in self.stones)
+
+    @property
+    def sequences_score(self) -> int:
+        """
+        Score of all sequences on the board
+        """
+        score = {1: 0, -1: 0}
+        for seq in self.seq_list.values():
+            score[seq.player] += seq.score(self.capture)
+        return sum(score.values())
 
     @property
     def score(self) -> int:
         """
         Static evaluation of the board
         """
-        score = {1: 0, -1: 0}
-        for seq in self.seq_list.values():
-            score[seq.player] += seq.score
-        return sum(score.values())
+        return self.sequences_score + self.stones_score + self.capture_score
 
     def is_double_free_three(self, pos: Coord, player: int) -> bool:
         """
@@ -309,7 +337,7 @@ class Board:
         seq = self.seq_list[id]
         space = seq.spaces[1] if block == Block.HEAD else seq.spaces[0]
         length = space + pos.distance(seq.end if block == Block.HEAD else seq.start)
-        if length < MAX_SEQ_LEN:
+        if length < SEQUENCE_WIN:
             return self.remove_sequence(id)
         self.remove_sequence_spaces(pos, id, block, from_list=True)
         if to_list:
@@ -344,7 +372,7 @@ class Board:
             elif not pos in seq.flank_cells:
                 block = Block.HEAD if pos < seq.start else Block.TAIL
                 self.remove_sequence_spaces(pos, id, block, from_list=True)
-                if seq.capacity < MAX_SEQ_LEN:
+                if seq.capacity < SEQUENCE_WIN:
                     self.remove_sequence(id)
             else:
                 block = seq.is_block(pos)
@@ -385,7 +413,7 @@ class Board:
         self.seq_list[id] = tmp_seq
         seq = self.seq_list[id]
         self.remove_sequence_spaces(seq.start - seq.dir, id, Block.HEAD)
-        seq.spaces = min(seq.spaces[0], MAX_SEQ_LEN - 1), seq.spaces[1]
+        seq.spaces = min(seq.spaces[0], SEQUENCE_WIN - 1), seq.spaces[1]
         self.add_sequence_spaces(id)
 
     def reduce_sequence_tail(self, pos: Coord, id: int) -> None:
@@ -399,7 +427,7 @@ class Board:
         self.seq_list[id] = tmp_seq
         seq = self.seq_list[id]
         self.remove_sequence_spaces(seq.end + seq.dir, id, Block.TAIL)
-        seq.spaces = seq.spaces[0], min(seq.spaces[1], MAX_SEQ_LEN - 1)
+        seq.spaces = seq.spaces[0], min(seq.spaces[1], SEQUENCE_WIN - 1)
         self.add_sequence_spaces(id)
 
     def split_sequence_at_removed_stone(self, id: int) -> None:
@@ -427,7 +455,7 @@ class Board:
         """
         Find a stone in the given direction and replace the sequences at the stone
         """
-        board_slice = SLICE_MAP[dir](self.cells, pos.y, pos.x, MAX_SEQ_LEN - 1)
+        board_slice = SLICE_MAP[dir](self.cells, pos.y, pos.x, SEQUENCE_WIN - 1)
         dist = self.find_stone(board_slice)
         if dist is None:
             return
@@ -466,7 +494,7 @@ class Board:
         """
         capturable = []
         for dir in SLICE_MAP.keys():
-            board_slice = SLICE_MAP[dir](self.cells, pos.y, pos.x, MAX_SEQ_LEN - 1)
+            board_slice = SLICE_MAP[dir](self.cells, pos.y, pos.x, SEQUENCE_WIN - 1)
             if self.capturable_slice(board_slice, cases):
                 capturable.extend([pos + dir, pos + dir + dir])
         return capturable
@@ -534,13 +562,13 @@ class Board:
         Returns the number of empty or ally cells after a sequence in a direction.
         """
         in_range = lambda p: p.in_range(self.cells.shape) and self.cells[p] != opponent
-        return sum(1 for _ in takewhile(in_range, pos.range(dir, MAX_SEQ_LEN))) - 1
+        return sum(1 for _ in takewhile(in_range, pos.range(dir, SEQUENCE_WIN))) - 1
 
     def get_half_sequence(self, pos: Coord, dir: Coord, player: int) -> Sequence:
         """
         Returns a sequence in a direction from a position.
         """
-        board_slice = SLICE_MAP[dir](self.cells, pos.y, pos.x, MAX_SEQ_LEN)
+        board_slice = SLICE_MAP[dir](self.cells, pos.y, pos.x, SEQUENCE_WIN)
         shape = self.slice_to_shape(board_slice)
         seq = Sequence(player, shape, pos, dir)
         seq.spaces = self.get_spaces(seq.end, seq.dir, -seq.player)
@@ -570,11 +598,11 @@ class Board:
                 s = self.seq_list[id]
                 if seq.id == id or seq.player != s.player:
                     continue
-                if s.capturable_sequence():
+                if s.capturable_sequence() > 0:
                     return True
                 visited.update((s.dir, -s.dir))
             for d in visited.symmetric_difference(SLICE_MAP.keys()):
                 s = self.get_sequence(stone, d, seq.player)
-                if s.capturable_sequence():
+                if s.capturable_sequence() > 0:
                     return True
         return False

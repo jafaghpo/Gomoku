@@ -6,11 +6,12 @@ from typing import ClassVar, Iterator
 import copy
 
 
-MAX_SEQ_LEN = 5
+SEQUENCE_WIN = 5
 MAX_SCORE = 1e12
 BASE_SCORE = 10
 BLOCK_PENALTY = 4
 CAPTURE_WIN = 5
+DELTA_WIN = SEQUENCE_WIN - CAPTURE_WIN
 
 
 class Block(IntEnum):
@@ -143,7 +144,6 @@ class Sequence:
     id: int = -1
 
     bounds: ClassVar[Coord] = Coord(19, 19)
-    capture: ClassVar[list[int] | None] = None
 
     @property
     def nb_holes(self) -> int:
@@ -219,8 +219,8 @@ class Sequence:
         """
         Returns the coordinates of the cells that are empty around the sequence.
         """
-        max_len_head = min(self.spaces[0], max(MAX_SEQ_LEN - self.length, 2))
-        max_len_tail = min(self.spaces[1], max(MAX_SEQ_LEN - self.length, 2))
+        max_len_head = min(self.spaces[0], max(SEQUENCE_WIN - self.length, 2))
+        max_len_tail = min(self.spaces[1], max(SEQUENCE_WIN - self.length, 2))
         head = tuple(self.start + (i + 1) * -self.dir for i in range(max_len_head))
         tail = tuple(self.end + (i + 1) * self.dir for i in range(max_len_tail))
         return self.filter_in_bounds(head), self.filter_in_bounds(tail)
@@ -252,7 +252,7 @@ class Sequence:
         Returns the coordinates of the cells that directly impact
         the growth of the sequence, meaning the holes and the flanking cells.
         """
-        end = min(max(MAX_SEQ_LEN - self.length - self.nb_holes, 0), 2)
+        end = min(max(SEQUENCE_WIN - self.length - self.nb_holes, 0), 2)
         head, tail = self.space_cells
         return self.filter_in_bounds(self.holes + head[:end] + tail[:end])
 
@@ -261,40 +261,21 @@ class Sequence:
         """
         Returns True if the sequence cannot win.
         """
-        return self.capacity < MAX_SEQ_LEN or len(self) < 2
+        return self.capacity < SEQUENCE_WIN or len(self) < 2
 
     @property
     def is_win(self) -> bool:
         """
         Returns True if the sequence is winning.
         """
-        return max(self.shape) >= MAX_SEQ_LEN
-
-    @property
-    def score(self) -> int:
-        """
-        Returns the score of the sequence.
-        """
-
-        @cache
-        def _score(shape: tuple[int], base: int) -> int:
-            n = 1
-            for seq_len in shape:
-                n *= base**seq_len
-            return n
-
-        if self.is_win:
-            return MAX_SCORE * self.player
-        block_penalty = BLOCK_PENALTY if self.is_blocked != Block.NO else 0
-        base = BASE_SCORE - self.nb_holes - block_penalty
-        return _score(self.shape, base) * self.player
+        return max(self.shape) >= SEQUENCE_WIN
 
     def __str__(self):
         s = f"Sequence {self.id} (p{self.player if self.player == 1 else 2}):\n"
         s += f"  shape: {self.shape}\n"
         s += f"  spaces: {self.spaces}\n"
         s += f"  direction: {DIR_STR[self.dir]}\n"
-        s += f"  score: {self.score}\n"
+        s += f"  score: {self.score()}\n"
         s += f"  is blocked: {self.is_blocked.name}\n"
         if self.is_blocked != Block.NO:
             s += f"  block cells: {', '.join(map(str, self.block_cells))}\n"
@@ -357,6 +338,27 @@ class Sequence:
 
     def copy(self) -> "Sequence":
         return copy.copy(self)
+
+    def score(self, capture: dict[int, int] | None = None) -> int:
+        """
+        Returns the score of the sequence.
+        """
+
+        @cache
+        def _score(shape: tuple[int], base: int) -> int:
+            n = 1
+            for seq_len in shape:
+                n *= base**seq_len
+            return n
+
+        if self.is_win:
+            return MAX_SCORE * self.player
+        if capture:
+            nb_capture = self.capturable_sequence()
+            # TODO: finish implementing capture score
+        block_penalty = BLOCK_PENALTY if self.is_blocked != Block.NO else 0
+        base = BASE_SCORE - self.nb_holes - block_penalty
+        return _score(self.shape, base) * self.player
 
     def is_block(self, pos: Coord) -> Block:
         """
@@ -473,7 +475,7 @@ class Sequence:
         if self.is_blocked == Block.TAIL or self.is_blocked == Block.BOTH:
             self.is_blocked = Block(self.is_blocked - Block.TAIL)
 
-    def capturable_sequence(self) -> bool:
+    def capturable_sequence(self) -> int:
         """
         Returns whether the sequence is capturable.
         """
@@ -481,6 +483,10 @@ class Sequence:
         def is_blocked_by_opponent(block: tuple[Coord]) -> bool:
             return block != () and block[0].in_range(self.bounds)
 
-        head = is_blocked_by_opponent(self.block_head) and self.shape[0] == 2
-        tail = is_blocked_by_opponent(self.block_tail) and self.shape[-1] == 2
-        return head or tail
+        head = int(is_blocked_by_opponent(self.block_head) and self.shape[0] == 2)
+        tail = int(
+            is_blocked_by_opponent(self.block_tail)
+            and self.nb_holes != 0
+            and self.shape[-1] == 2
+        )
+        return head + tail
