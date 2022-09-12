@@ -10,6 +10,8 @@ from gomoku.sequence import (
     Block,
     SEQUENCE_WIN,
     MAX_SCORE,
+    BASE_SCORE,
+    CAPTURE_BASE_SCORE,
     CAPTURE_WIN,
     DELTA_WIN,
 )
@@ -164,17 +166,20 @@ class Board:
         """
         Score of capture
         """
-        if not self.capture or (self.capture[1] == 0 and self.capture[-1] == 0):
-            return 0
-        x = max(DELTA_WIN, 0)
-        p1, p2 = self.capture
-        p1_score = BASE_CAPTURE_SCORE ** (p1 + x) - 1
-        p2_score = -(BASE_CAPTURE_SCORE ** (p2 + x)) + 1
-        if p1 >= CAPTURE_WIN:
-            return int(MAX_SCORE)
-        elif p2 >= CAPTURE_WIN:
-            return int(-MAX_SCORE)
-        return int(p1_score + p2_score)
+
+        @cache
+        def _capture_score(capture: tuple[tuple[int, int]]) -> int:
+            score = 0
+            for player, count in capture:
+                exponent = max(DELTA_WIN + count, 0)
+                if exponent >= SEQUENCE_WIN:
+                    return MAX_SCORE * player
+                n = CAPTURE_BASE_SCORE ** exponent * player - player
+                score += BASE_SCORE * n
+            return score
+
+        # return _capture_score(((1, self.capture[1]), (-1, self.capture[-1])))
+        return _capture_score(tuple(self.capture.items()))
 
     @property
     def stones_score(self) -> int:
@@ -188,8 +193,10 @@ class Board:
         """
         Score of all sequences on the board
         """
+        print(f"In sequences_score")
         score = {1: 0, -1: 0}
         for seq in self.seq_list.values():
+            print(f"seq id: {seq.id}")
             score[seq.player] += seq.score(self.capture)
         return sum(score.values())
 
@@ -598,11 +605,11 @@ class Board:
                 s = self.seq_list[id]
                 if seq.id == id or seq.player != s.player:
                     continue
-                if s.capturable_sequence() > 0:
+                if s.capturable_sequence() != 0:
                     return True
                 visited.update((s.dir, -s.dir))
             for d in visited.symmetric_difference(SLICE_MAP.keys()):
                 s = self.get_sequence(stone, d, seq.player)
-                if s.capturable_sequence() > 0:
+                if s.capturable_sequence() != 0:
                     return True
         return False
