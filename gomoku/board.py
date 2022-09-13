@@ -9,11 +9,7 @@ from gomoku.sequence import (
     Coord,
     Block,
     SEQUENCE_WIN,
-    MAX_SCORE,
-    BASE_SCORE,
-    CAPTURE_BASE_SCORE,
     CAPTURE_WIN,
-    DELTA_WIN,
 )
 
 
@@ -98,7 +94,7 @@ def get_cell_values(shape: tuple[int, int]) -> np.ndarray:
         for x in range(shape[1] // 2 + 1):
             array[y, x] = array[y, -x - 1] = array[-y - 1, x] = array[
                 -y - 1, -x - 1
-            ] = (x + y + 1)
+            ] = min(x, y) + 1
     return array
 
 
@@ -166,20 +162,7 @@ class Board:
         """
         Score of capture
         """
-
-        @cache
-        def _capture_score(capture: tuple[tuple[int, int]]) -> int:
-            score = 0
-            for player, count in capture:
-                exponent = max(DELTA_WIN + count, 0)
-                if exponent >= SEQUENCE_WIN:
-                    return MAX_SCORE * player
-                n = CAPTURE_BASE_SCORE ** exponent * player - player
-                score += BASE_SCORE * n
-            return score
-
-        # return _capture_score(((1, self.capture[1]), (-1, self.capture[-1])))
-        return _capture_score(tuple(self.capture.items()))
+        return Sequence.capture_score(tuple(self.capture.items()))
 
     @property
     def stones_score(self) -> int:
@@ -193,10 +176,8 @@ class Board:
         """
         Score of all sequences on the board
         """
-        print(f"In sequences_score")
         score = {1: 0, -1: 0}
         for seq in self.seq_list.values():
-            print(f"seq id: {seq.id}")
             score[seq.player] += seq.score(self.capture)
         return sum(score.values())
 
@@ -229,14 +210,16 @@ class Board:
         """
         Check if the game is over.
         """
-        if self.capture and any(c >= CAPTURE_WIN for c in self.capture):
-            return 1 if self.capture[0] >= CAPTURE_WIN else -1
+        if self.capture and any(c >= CAPTURE_WIN for c in self.capture.values()):
+            return 1 if self.capture[1] >= CAPTURE_WIN else 2
         for seq in self.seq_list.values():
-            if seq.is_win and not self.last_chance:
+            if seq.is_win:
+                if self.last_chance:
+                    return seq.player if seq.player == 1 else 2
                 if self.capturable_stones_in_sequences(seq):
                     self.last_chance = True
                     return 0
-                return seq.player
+                return seq.player if seq.player == 1 else 2
         return 0
 
     def get_pos_c4(self, x: int):

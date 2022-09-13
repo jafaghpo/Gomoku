@@ -337,64 +337,51 @@ class Sequence:
     def copy(self) -> "Sequence":
         return copy.copy(self)
 
+    @staticmethod
+    @cache
+    def capture_score(capture: tuple[tuple[int, int]]) -> int:
+        score = 0
+        for player, count in capture:
+            exponent = max(DELTA_WIN + count, 0)
+            if exponent >= SEQUENCE_WIN:
+                return MAX_SCORE * player
+            n = CAPTURE_BASE_SCORE ** exponent * player - player
+            score += BASE_SCORE * n
+        return score
+
+    @staticmethod
+    @cache
+    def seq_score(shape: tuple[int], base: int) -> int:
+        if not shape:
+            return 0
+        n = BASE_SCORE
+        for subseq in shape:
+            if subseq >= SEQUENCE_WIN:
+                return MAX_SCORE
+            n *= base ** subseq
+        return n
+
     def score(self, capture: dict[int, int] | None = None) -> int:
         """
         Returns the score of the sequence.
         """
-
-        @cache
-        def _capture_score(capture: tuple[tuple[int, int]]) -> int:
-            score = 0
-            for player, count in capture:
-                exponent = max(DELTA_WIN + count, 0)
-                if exponent >= SEQUENCE_WIN:
-                    return MAX_SCORE * player
-                n = CAPTURE_BASE_SCORE ** exponent * player - player
-                score += BASE_SCORE * n
-            return score
-
-        @cache
-        def _score(shape: tuple[int], base: int) -> int:
-            if not shape:
-                return 0
-            n = BASE_SCORE
-            for subseq in shape:
-                if subseq >= SEQUENCE_WIN:
-                    return MAX_SCORE
-                n *= base ** subseq
-            return n
-
         capture_score = 0
         shape = self.shape
-        if capture:
+        if capture and self.nb_holes == 0:
             tmp_capture = copy.copy(capture)
-            x = self.capturable_sequence()
-            tmp_capture[-self.player] += abs(x)
-            capture_score = _capture_score(tuple(capture.items()))
-            
-            # capture_shape = max(DELTA_WIN + capture[-self.player], 1)
-
-            # match self.capturable_sequence():
-            #     case 1:
-            #         capture_score = _score((capture_shape,), CAPTURE_BASE_SCORE)
-            #         print(f"capture_score: {capture_score}")
-            #         capture_score += self.player
-            #         shape = shape[1:]
-            #     case -1:
-            #         capture_score = _score((capture_shape,), CAPTURE_BASE_SCORE)
-            #         capture_score += self.player
-            #         shape = shape[:-1]
-            #     case 2:
-            #         capture_shape = max(DELTA_WIN + capture[-self.player] + 1, 1)
-            #         capture_score = _score((capture_shape,), CAPTURE_BASE_SCORE)
-                    
-            #         shape = shape[1:-1]
-            #     case _:
-            #         capture_score = 0
+            n = self.capturable_sequence()
+            if n != 0:
+                tmp_capture[-self.player] += abs(n)
+                capture_score = Sequence.capture_score(tuple(tmp_capture.items()))
+            if n == 1:
+                shape = shape[1:]
+            elif n == -1:
+                shape = shape[:-1]
+            elif n == 2:
+                shape = shape[1:-1]
         block_penalty = BLOCK_PENALTY if self.is_blocked != Block.NO else 0
         base = BASE_SCORE - self.nb_holes - block_penalty
-        seq_score = _score(shape, base) * self.player
-        print(f"seq_score: {seq_score}, capture_score: {capture_score}")
+        seq_score = Sequence.seq_score(shape, base) * self.player
         return seq_score + capture_score
 
     def is_block(self, pos: Coord) -> Block:
@@ -475,7 +462,7 @@ class Sequence:
                 self.start,
                 self.dir,
                 (self.spaces[0], 0),
-                Block(self.is_blocked & Block.HEAD + Block.TAIL),
+                Block((self.is_blocked & Block.HEAD) + Block.TAIL),
             ),
             Sequence(
                 self.player,
@@ -483,7 +470,7 @@ class Sequence:
                 pos + self.dir,
                 self.dir,
                 (0, self.spaces[1]),
-                Block(self.is_blocked & Block.TAIL + Block.HEAD),
+                Block((self.is_blocked & Block.TAIL) + Block.HEAD),
             ),
         )
 
@@ -521,11 +508,7 @@ class Sequence:
             return block != () and block[0].in_range(self.bounds)
 
         head = int(is_blocked_by_opponent(self.block_head) and self.shape[0] == 2)
-        tail = int(
-            is_blocked_by_opponent(self.block_tail)
-            and self.nb_holes != 0
-            and self.shape[-1] == 2
-        )
-        if head == 1 and tail == 1:
+        tail = int(is_blocked_by_opponent(self.block_tail) and self.shape[-1] == 2)
+        if self.nb_holes != 0 and head + tail == 2:
             return 2
         return head - tail

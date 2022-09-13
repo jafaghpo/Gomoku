@@ -399,16 +399,16 @@ class Display:
             move_msg += f"placed a stone at {pos}"
             if self.captures and len(captures) > 0:
                 move_msg += f" and captured {len(captures)} enemy stones\n"
-                move_msg += f"Capture count: "
+                move_msg += f"=> capture count: "
                 move_msg += f"[{self.board.capture[1]}, {self.board.capture[-1]}]"
                 self.render_background()
                 self.render_board()
                 self.render_all_cells()
                 self.render_last_move(pos)
-            print(move_msg)
+            print(f"{move_msg}\n")
             self.update()
             winner = self.board.is_game_over()
             if winner:
                 self.game_over = True
-                print(f"Game over! Winner is Player {winner if winner != 1 else 2}")
+                print(f"Game over! Winner is Player {winner}")
             self.player_turn *= -1
