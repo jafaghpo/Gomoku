@@ -5,14 +5,10 @@ from functools import cache
 from typing import ClassVar, Iterator
 import copy
 
-
-SEQUENCE_WIN = 5
 MAX_SCORE = 1e15
 BASE_SCORE = 10
 CAPTURE_BASE_SCORE = 5
 BLOCK_PENALTY = 4
-CAPTURE_WIN = 5
-DELTA_WIN = SEQUENCE_WIN - CAPTURE_WIN
 
 
 class Block(IntEnum):
@@ -85,20 +81,11 @@ class Coord(namedtuple("Coord", "y x")):
                 yield coord
             current += dir * (step2d + 1)
 
-    def in_range(self, r) -> bool:
+    def in_range(self, size: int) -> bool:
         """
         Returns True if the Coord is between a certain range.
-        Can accept multiple formats for the range.
         """
-        match r:
-            case [(y0, x0), (y1, x1)] | (y0, x0, y1, x1) | ((y0, x0), (y1, x1)):
-                return y0 <= self.y < y1 and x0 <= self.x < x1
-            case [y, x] | (y, x):
-                return 0 <= self.y < y and 0 <= self.x < x
-            case (i,) | i if i is int:
-                return 0 <= self.y < i and 0 <= self.x < i
-            case _:
-                return False
+        return 0 <= self.y < size and 0 <= self.x < size
 
     def to_block(self) -> Block:
         """
@@ -144,7 +131,9 @@ class Sequence:
     is_blocked: Block = Block.NO
     id: int = -1
 
-    bounds: ClassVar[Coord] = Coord(19, 19)
+    board_size: ClassVar[int] = 19
+    sequence_win: ClassVar[int] = 5
+    capture_win: ClassVar[int] = 5
 
     @property
     def nb_holes(self) -> int:
@@ -220,8 +209,8 @@ class Sequence:
         """
         Returns the coordinates of the cells that are empty around the sequence.
         """
-        max_len_head = min(self.spaces[0], max(SEQUENCE_WIN - self.length, 2))
-        max_len_tail = min(self.spaces[1], max(SEQUENCE_WIN - self.length, 2))
+        max_len_head = min(self.spaces[0], max(Sequence.sequence_win - self.length, 2))
+        max_len_tail = min(self.spaces[1], max(Sequence.sequence_win - self.length, 2))
         head = tuple(self.start + (i + 1) * -self.dir for i in range(max_len_head))
         tail = tuple(self.end + (i + 1) * self.dir for i in range(max_len_tail))
         return self.filter_in_bounds(head), self.filter_in_bounds(tail)
@@ -253,7 +242,7 @@ class Sequence:
         Returns the coordinates of the cells that directly impact
         the growth of the sequence, meaning the holes and the flanking cells.
         """
-        end = min(max(SEQUENCE_WIN - self.length - self.nb_holes, 0), 2)
+        end = min(max(Sequence.sequence_win - self.length - self.nb_holes, 0), 2)
         head, tail = self.space_cells
         return self.filter_in_bounds(self.holes + head[:end] + tail[:end])
 
@@ -262,14 +251,14 @@ class Sequence:
         """
         Returns True if the sequence cannot win.
         """
-        return self.capacity < SEQUENCE_WIN or len(self) < 2
+        return self.capacity < Sequence.sequence_win or len(self) < 2
 
     @property
     def is_win(self) -> bool:
         """
         Returns True if the sequence is winning.
         """
-        return max(self.shape) >= SEQUENCE_WIN
+        return max(self.shape) >= Sequence.sequence_win
 
     def __str__(self):
         s = f"Sequence {self.id} (p{self.player if self.player == 1 else 2}):\n"
@@ -342,10 +331,10 @@ class Sequence:
     def capture_score(capture: tuple[tuple[int, int]]) -> int:
         score = 0
         for player, count in capture:
-            exponent = max(DELTA_WIN + count, 0)
-            if exponent >= SEQUENCE_WIN:
+            exponent = max(Sequence.sequence_win - Sequence.capture_win + count, 0)
+            if exponent >= Sequence.sequence_win:
                 return MAX_SCORE * player
-            n = CAPTURE_BASE_SCORE ** exponent * player - player
+            n = CAPTURE_BASE_SCORE**exponent * player - player
             score += BASE_SCORE * n
         return score
 
@@ -356,9 +345,9 @@ class Sequence:
             return 0
         n = BASE_SCORE
         for subseq in shape:
-            if subseq >= SEQUENCE_WIN:
+            if subseq >= Sequence.sequence_win:
                 return MAX_SCORE
-            n *= base ** subseq
+            n *= base**subseq
         return n
 
     def score(self, capture: dict[int, int] | None = None) -> int:
@@ -400,7 +389,7 @@ class Sequence:
         """
         Returns cells that are not out of range.
         """
-        return tuple(filter(lambda c: c.in_range(self.bounds), cells))
+        return tuple(filter(lambda c: c.in_range(Sequence.board_size), cells))
 
     def extend_tail(self, pos: Coord, space: int) -> None:
         """
@@ -505,7 +494,7 @@ class Sequence:
         """
 
         def is_blocked_by_opponent(block: tuple[Coord]) -> bool:
-            return block != () and block[0].in_range(self.bounds)
+            return block != () and block[0].in_range(Sequence.board_size)
 
         head = int(is_blocked_by_opponent(self.block_head) and self.shape[0] == 2)
         tail = int(is_blocked_by_opponent(self.block_tail) and self.shape[-1] == 2)

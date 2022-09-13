@@ -95,19 +95,19 @@ class MatchMenu:
 
         self.menu.add.button("Resume", self.on_resume)
         self.menu.add.selector(
-            "Help move",
+            "Move suggestion",
             [("Off", 0), ("On", 1)],
-            onchange=self.on_help_move,
+            onchange=self.on_move_suggestion,
         )
         self.menu.add.button("Quit", self.on_quit)
 
     def on_quit(self):
         sys.exit(pygame.quit())
 
-    def on_help_move(self, value: tuple, help: int):
+    def on_move_suggestion(self, value: tuple, help: int):
         selected, index = value
         print(f'Selected difficulty: "{selected}" ({help}) at index {index}')
-        self.display.args.helpmove = selected[1]
+        self.display.args.move_suggestion = selected[1]
 
     def on_resume(self):
         self.menu.close(self.display.run())
@@ -316,8 +316,10 @@ class Display:
                 return pos
 
     def cancel_last_moves(self) -> None:
+        if len(self.board_history) == 0:
+            return
         if len(self.board_history) <= 2:
-            self.board = Board()
+            self.board = self.board_history[0]
             self.board_history = []
             self.render_background()
             self.render_board()
@@ -349,7 +351,14 @@ class Display:
     # Main loop of the whole game, runs until the game is over and after the start menu.
     def run(self) -> None:
         if not self.board:
-            self.board = Board((self.args.size, self.args.size))
+            self.board = Board(
+                self.args.size,
+                self.args.win_sequence,
+                self.args.capture,
+                self.args.free_double,
+                self.args.gravity,
+                self.args.debug,
+            )
         self.render_background()
         self.render_board()
         self.render_all_cells()
@@ -364,14 +373,14 @@ class Display:
             if self.game_over:
                 continue
             if self.args.players[self.player_turn] == "human":
-                if self.args.helpmove:
+                if self.args.move_suggestion:
                     if had_help == 0:
                         self.render_help_move(dumb_algo(self.board))
                         self.update()
                         had_help = 1
                 if not pos or (
-                    self.board.free_threes
-                    and self.board.is_double_free_three(pos, self.player_turn)
+                    self.board.free_double
+                    and self.board.is_free_double(pos, self.player_turn)
                 ):
                     continue
             else:
@@ -408,7 +417,10 @@ class Display:
             print(f"{move_msg}\n")
             self.update()
             winner = self.board.is_game_over()
-            if winner:
+            if winner > 0:
                 self.game_over = True
                 print(f"Game over! Winner is Player {winner}")
+            elif winner == -1:
+                self.game_over = True
+                print("Game over! Draw")
             self.player_turn *= -1

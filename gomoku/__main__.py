@@ -24,10 +24,26 @@ def parse_args(argv: list[str]) -> Namespace:
     parser.add_argument(
         "-s",
         "--size",
-        choices=range(10, 25),
+        choices=range(3, 25),
         type=int,
         default=19,
         help="Size of the board",
+    )
+    parser.add_argument(
+        "-c",
+        "--capture",
+        choices=range(0, 10),
+        type=int,
+        default=5,
+        help="Number of captures to win. 0 for disabling capture",
+    )
+    parser.add_argument(
+        "-w",
+        "--win-sequence",
+        choices=range(1, 10),
+        type=int,
+        default=5,
+        help="Number of consecutive stones to win",
     )
     parser.add_argument(
         "-c4",
@@ -36,13 +52,38 @@ def parse_args(argv: list[str]) -> Namespace:
         help="Switch to connect4 gamemode instead of gomoku",
     )
     parser.add_argument(
-        "-hm",
-        "--helpmove",
+        "-m",
+        "--move-suggestion",
         action="store_true",
         help="Shows which move is the best for human players",
     )
+    parser.add_argument(
+        "-d",
+        "--debug",
+        action="store_true",
+        help="Prints debug information",
+    )
+    parser.add_argument(
+        "-g",
+        "--gravity",
+        action="store_true",
+        help="The stones will fall down at the bottom of the board like in connect4",
+    )
+    parser.add_argument(
+        "-f",
+        "--free-double",
+        action="store_false",
+        default=True,
+        help="""Enable if specified the possibility to place a stone that introduces
+        an unstoppable double free sequence scenario""",
+    )
 
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    if args.win_sequence > args.size:
+        parser.error("Board size must be greater than the winning sequence length")
+    if args.free_double and args.win_sequence < 5:
+        parser.error("Free double is not possible with a win sequence less than 5")
+    return args
 
 
 def main() -> None:
