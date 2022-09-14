@@ -1,6 +1,6 @@
 from sys import argv
 from argparse import ArgumentParser, Namespace
-from gomoku.display import Display, GameMenu, MatchMenu
+from gomoku.display import Display, GameMenu
 
 
 def parse_args(argv: list[str]) -> Namespace:
@@ -75,14 +75,16 @@ def parse_args(argv: list[str]) -> Namespace:
         action="store_false",
         default=True,
         help="""Enable if specified the possibility to place a stone that introduces
-        an unstoppable double free sequence scenario""",
+        an unstoppable double free sequence scenario
+        (enabled for winning sequence less than 5)""",
     )
 
     args = parser.parse_args(argv)
     if args.win_sequence > args.size:
         parser.error("Board size must be greater than the winning sequence length")
     if args.free_double and args.win_sequence < 5:
-        parser.error("Free double is not possible with a win sequence less than 5")
+        args.free_double = False
+        print("Warning: Free double is enabled due to winning sequence less than 5")
     return args
 
 

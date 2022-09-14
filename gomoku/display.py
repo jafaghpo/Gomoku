@@ -1,5 +1,3 @@
-from tkinter.tix import CELL
-from tracemalloc import start
 import pygame
 import pygame_menu
 import numpy as np
@@ -165,7 +163,6 @@ class Display:
     def __init__(self, args):
         pygame.init()
         self.args = args
-        print(self.args)
         self.screen_size = BASE_SIZE + (args.size - 1) * CELL_SIZE
         if self.args.connect4:
             self.args.players = ["human", "human"]
@@ -300,20 +297,10 @@ class Display:
         )
 
     def get_valid_move(self) -> Coord | None:
-        if self.args.connect4:
-            pos = pygame.mouse.get_pos()
-            print(pos)
-            print(self.g_x, self.g_y)
-            print((pos[0] - (self.g_x / 2) // 2) // self.g_x)
-            x = int((pos[0] - (self.g_x / 2) // 2) // self.g_x)
-            if self.board.can_place_c4(x):
-                return self.board.get_pos_c4(x)
-        else:
-            pos = pygame.mouse.get_pos()
-            x, y = ((p - PADDING // 2) // CELL_SIZE for p in pos)
-            pos = Coord(y, x)
-            if self.board.can_place(pos):
-                return pos
+        x, y = ((p - PADDING // 2) // CELL_SIZE for p in pygame.mouse.get_pos())
+        y = min(self.board.size - 1, max(0, y))
+        x = min(self.board.size - 1, max(0, x))
+        return self.board.get_valid_pos(y, x)
 
     def cancel_last_moves(self) -> None:
         if len(self.board_history) == 0:

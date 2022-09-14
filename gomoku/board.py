@@ -111,6 +111,7 @@ class Board:
     capture: dict[int, int] | None
     last_chance: bool
     playing: int
+    children: set[Coord]
 
     cell_values: ClassVar[np.ndarray] = None
     size: ClassVar[int] = 19
@@ -133,6 +134,7 @@ class Board:
         self.seq_map = {}
         self.seq_list = {}
         self.stones = set()
+        self.children = set()
         self.last_move = None
         self.last_seq_id = 0
         self.capture = {1: 0, -1: 0} if capture_win else None
@@ -236,7 +238,7 @@ class Board:
             return 1 if self.capture[1] >= Sequence.capture_win else 2
         for seq in self.seq_list.values():
             if seq.is_win:
-                if self.last_chance:
+                if not self.capture or self.last_chance:
                     return seq.player if seq.player == 1 else 2
                 if self.capturable_stones_in_sequences(seq):
                     self.last_chance = True
@@ -248,6 +250,17 @@ class Board:
         for y in range(5, -1, -1):
             if self.cells[y, x] == 0:
                 return Coord(y, x)
+
+    def get_valid_pos(self, y: int, x: int) -> Coord | None:
+        """
+        Get the position of the stone depending on the gravity option
+        """
+        if not Board.gravity:
+            pos = Coord(y, x)
+            return pos if self.can_place(pos) else None
+        offset = np.argmax(self.cells[::-1, x] == 0)
+        if self.cells[Board.size - offset - 1, x] == 0:
+            return Coord(Board.size - offset - 1, x)
 
     def can_place_c4(self, x: int) -> bool:
         return self.cells[(x, 0)] == 0
@@ -410,9 +423,14 @@ class Board:
             for stone in capturable:
                 self.update_sequences_at_removed_stone(stone)
         self.update_sequences_at_added_stone(pos, player)
+        if len(capturable) > 0:
+            self.children = self.get_children()
+        else:
+            self.update_children(pos)
         if Board.debug:
             print(self)
         self.playing = -player
+        print(f"Children: {len(self.children)}")
         return capturable
 
     def reduce_sequence_head(self, pos: Coord, id: int) -> None:
@@ -514,16 +532,27 @@ class Board:
                 capturable.extend([pos + dir, pos + dir + dir])
         return capturable
 
-    def get_neighbors(self) -> set[Coord]:
+    def get_children_around_stone(self, pos: Coord) -> list[Coord]:
+        """
+        Returns a list of positions around the given position.
+        """
+        return [pos + off for off in NEIGHBORS_OFFSET if self.can_place(pos + off)]
+
+    def get_children(self) -> set[Coord]:
         """
         Returns the coordinates of the neighbor cells of all stones in a 2-cell radius
         """
         children = set()
         for stone in self.stones:
-            raw_neighbors = map(lambda offset: stone + offset, NEIGHBORS_OFFSET)
-            neighbors = list(filter(lambda n: self.can_place(n), raw_neighbors))
-            children.update(neighbors)
+            children.update(self.get_children_around_stone(stone))
         return children
+
+    def update_children(self, pos: Coord) -> None:
+        """
+        Update the children of the board.
+        """
+        self.children.update(self.get_children_around_stone(pos))
+        self.children.discard(pos)
 
     @staticmethod
     @cache
