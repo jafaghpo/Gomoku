@@ -1,3 +1,4 @@
+from xmlrpc.client import FastUnmarshaller
 import pygame
 import pygame_menu
 import numpy as np
@@ -7,17 +8,20 @@ from copy import deepcopy
 from gomoku.board import Board, Coord
 from gomoku.engine import dumb_algo
 
-CELL_SIZE = 40
-BASE_SIZE = CELL_SIZE * 2
+SCREEN_SIZE = 1000
 LINE_WIDTH = 2
-PADDING = BASE_SIZE // 2
 
 TEXT_PATH = "./assets/textures"
 
 
-# Option menu inside the start menu
 class OptionMenu:
-    def __init__(self, display):
+    """
+    GUI to change the game options before starting a new game.
+    Options are:
+    - Board size
+    - Time limit for the engine move
+    """
+    def __init__(self, display: "Display"):
         self.menu = pygame_menu.Menu(
             "Options",
             display.screen_size,
@@ -27,26 +31,10 @@ class OptionMenu:
         self.display = display
         self.menu.add.dropselect(
             title="Pick a board size",
-            items=[
-                ("10", 10),
-                ("11", 11),
-                ("12", 12),
-                ("13", 13),
-                ("14", 14),
-                ("15", 15),
-                ("16", 16),
-                ("17", 17),
-                ("18", 18),
-                ("19", 19),
-                ("20", 20),
-                ("21", 21),
-                ("22", 22),
-                ("23", 23),
-                ("24", 24),
-            ],
+            items=[(str(s), s) for s in range(3, 26)],
             font_size=20,
-            default=9,
-            open_middle=True,  # Opens in the middle of the menu
+            default=19,
+            open_middle=True,
             selection_box_height=5,
             selection_box_width=212,
             selection_infinite=True,
@@ -62,22 +50,31 @@ class OptionMenu:
 
         self.menu.add.button("Return to main menu", pygame_menu.events.RESET)
 
-    def on_board_size_change(self, value: tuple, board_size: str):
-        selected, index = value
-        print(f'Selected difficulty: "{selected}" ({board_size}) at index {index}')
-        self.display.args.size = int(board_size)
-        self.display.screen_size = BASE_SIZE + (self.display.args.size - 1) * CELL_SIZE
+    def on_board_size_change(self, _: tuple, board_size: str):
+        """
+        Callback for the board size dropselect.
+        """
+        self.display.args.board = int(board_size)
+        self.display.screen_size = self.display.base_size + (self.display.args.board - 1) * self.display.cell_size
 
     def on_time_change(self, time: str):
-        selected = time
-        print(f'Algo time limit (ms): "{selected}" ({time})')
-        self.display.args.time = selected
+        """
+        Callback for the time limit text input.
+        """
+        if time.isdigit():
+            self.display.args.time = int(time)
 
 
-# Pause menu that appears when the game is paused
 class MatchMenu:
-    def __init__(self, display):
-        mytheme = pygame_menu.Theme(
+    """
+    Pause the game and display the pause menu.
+    Options are:
+    - Resume the game
+    - Move suggestion
+    - Quit the game
+    """
+    def __init__(self, display: "Display"):
+        theme = pygame_menu.Theme(
             background_color=(0, 0, 0, 0),  # transparent background
             title_background_color=(4, 47, 126),
             title_font_shadow=True,
@@ -88,7 +85,7 @@ class MatchMenu:
             "Pause",
             display.screen_size,
             display.screen_size,
-            theme=mytheme,
+            theme=theme,
         )
 
         self.menu.add.button("Resume", self.on_resume)
@@ -100,20 +97,36 @@ class MatchMenu:
         self.menu.add.button("Quit", self.on_quit)
 
     def on_quit(self):
+        """
+        Quit the game when the quit button is pressed
+        """
         sys.exit(pygame.quit())
 
-    def on_move_suggestion(self, value: tuple, help: int):
-        selected, index = value
-        print(f'Selected difficulty: "{selected}" ({help}) at index {index}')
+    def on_move_suggestion(self, value: tuple):
+        """
+        Enable or disable the move suggestion feature by selecting on or off
+        """
+        selected, _ = value
         self.display.args.move_suggestion = selected[1]
 
     def on_resume(self):
+        """
+        Resume the game when the resume button is pressed
+        """
         self.menu.close(self.display.run())
 
 
-# Game menu that appears when the game is started, contains the option menu
+
 class GameMenu:
-    def __init__(self, display):
+    """
+    Main menu that appears when the game is launched.
+    Options are:
+    - Start a new game
+    - Quit the game
+    - Select the players type
+    - Redirection to the options menu
+    """
+    def __init__(self, display: "Display"):
         self.menu = pygame_menu.Menu(
             "Gomoku",
             display.screen_size,
@@ -138,17 +151,24 @@ class GameMenu:
         self.menu.add.button("Options", option_menu.menu)
         self.menu.add.button("Quit", self.on_quit)
 
-    def on_player1_change(self, value: tuple, player: str):
-        selected, index = value
-        print(f'Selected difficulty: "{selected}" ({player}) at index {index}')
+    def on_player1_change(self, value: tuple):
+        """
+        Change the player 1 type when the player 1 selector is changed
+        """
+        selected, _ = value
         self.player1_type = selected[1]
 
-    def on_player2_change(self, value: tuple, player: str):
-        selected, index = value
-        print(f'Selected difficulty: "{selected}" ({player}) at index {index}')
+    def on_player2_change(self, value: tuple):
+        """
+        Change the player 2 type when the player 2 selector is changed
+        """
+        selected, _ = value
         self.player2_type = selected[1]
 
     def on_start(self):
+        """
+        Start a new game when the start button is pressed
+        """
         self.display.args.players = {1: self.player1_type, -1: self.player2_type}
         self.display.screen = pygame.display.set_mode(
             (self.display.screen_size, self.display.screen_size)
@@ -156,172 +176,211 @@ class GameMenu:
         self.menu.close(self.display.run())
 
     def on_quit(self):
+        """
+        Quit the game when the quit button is pressed
+        """
         sys.exit(pygame.quit())
 
 
 class Display:
+    """
+    Display the game and handle the user inputs
+    """
     def __init__(self, args):
         pygame.init()
         self.args = args
-        self.screen_size = BASE_SIZE + (args.size - 1) * CELL_SIZE
-        if self.args.connect4:
-            self.args.players = ["human", "human"]
-            self.args.size = 7
+        self.cell_size = SCREEN_SIZE // (self.args.board + 1)
+        self.screen_size = self.cell_size * (self.args.board + 1)
+        self.base_size = self.cell_size * 2
+        self.screen_size = self.base_size + (args.board - 1) * self.cell_size
+        self.padding = self.cell_size
+        if args.connect4:
             self.background = pygame.image.load(f"{TEXT_PATH}/connect4_background.png")
-            self.screen = pygame.display.set_mode((1920, 1200))
-            pygame.display.set_caption("Connect4")
-            self.stone_text = {
-                1: f"{TEXT_PATH}/c4_red.png",
-                -1: f"{TEXT_PATH}/c4_yellow.png",
-            }
         else:
             self.background = pygame.image.load(f"{TEXT_PATH}/classic_background.png")
-            self.screen = pygame.display.set_mode((self.screen_size, self.screen_size))
-            pygame.display.set_caption("Gomoku")
-            self.stone_text = {
-                0: f"{TEXT_PATH}/classic_help_stone.png",
-                1: f"{TEXT_PATH}/classic_black_stone.png",
-                -1: f"{TEXT_PATH}/classic_white_stone.png",
-            }
-
+        self.screen = pygame.display.set_mode((self.screen_size, self.screen_size))
+        pygame.display.set_caption("Gomoku")
+        self.stone_text = {
+            0: f"{TEXT_PATH}/classic_help_stone.png",
+            1: f"{TEXT_PATH}/classic_black_stone.png",
+            -1: f"{TEXT_PATH}/classic_white_stone.png",
+            2: f"{TEXT_PATH}/c4_yellow.png",
+            -2: f"{TEXT_PATH}/c4_red.png",
+            3: f"{TEXT_PATH}/c4_hole.png",
+        }
         self.board = None
         self.board_history = []
         self.player_turn = 1
         self.game_over = False
-        self.captures = True
         self.match_menu = MatchMenu(self)
 
     def render_background(self) -> None:
+        """
+        Render the background of the game
+        """
         self.screen.blit(self.background, (0, 0))
 
-    def render_connect4(self):
-        self.g_x = 1920 / 6
-        self.g_y = 1200 / 7
-        for y in range(6):
-            for x in range(7):
-                stone = pygame.image.load(f"{TEXT_PATH}/c4_hole.png")
-                stone = pygame.transform.scale(stone, (self.g_y, self.g_y))
-                self.screen.blit(
-                    stone,
-                    (
-                        x * self.g_x + (self.g_x / 2 - self.g_y / 2),
-                        y * self.g_y + (self.g_y / 2),
-                    ),
-                )
-
-    def render_board(self):
-        if self.args.connect4:
-            self.render_connect4()
-        else:
-            for y in range(self.args.size):
-                pygame.draw.line(
-                    self.screen,
-                    [255, 255, 255],
-                    (PADDING, y * CELL_SIZE + PADDING),
-                    (
-                        (self.args.size - 1) * CELL_SIZE + PADDING,
-                        y * CELL_SIZE + PADDING,
-                    ),
-                    LINE_WIDTH,
-                )
-            for x in range(self.args.size):
-                pygame.draw.line(
-                    self.screen,
-                    [255, 255, 255],
-                    (x * CELL_SIZE + PADDING, PADDING),
-                    (
-                        x * CELL_SIZE + PADDING,
-                        (self.args.size - 1) * CELL_SIZE + PADDING,
-                    ),
-                    LINE_WIDTH,
-                )
+    def render_grid(self):
+        """
+        Draw the grid of the game
+        """
+        for i in range(self.args.board):
+            pygame.draw.line(
+                self.screen,
+                [255, 255, 255],
+                (self.padding, i * self.cell_size + self.padding),
+                (
+                    (self.args.board - 1) * self.cell_size + self.padding,
+                    i * self.cell_size + self.padding,
+                ),
+                LINE_WIDTH,
+            )
+            pygame.draw.line(
+                self.screen,
+                [255, 255, 255],
+                (i * self.cell_size + self.padding, self.padding),
+                (
+                    i * self.cell_size + self.padding,
+                    (self.args.board - 1) * self.cell_size + self.padding,
+                ),
+                LINE_WIDTH,
+            )
+    
+    def render_holes(self):
+        """
+        Draw the holes of the game
+        """
+        for y in range(self.args.board):
+            for x in range(self.args.board):
+                self.render_cell(Coord(y, x), 3)
 
     def update(self) -> None:
+        """
+        Update the display
+        """
         pygame.display.update()
 
     def render_cell(self, pos: Coord, player: int) -> None:
-        stone = pygame.image.load(self.stone_text[player])
+        """
+        Render a cell on the board
+        """
+        index = 3
         if self.args.connect4:
-            stone = pygame.transform.scale(stone, (self.g_y, self.g_y))
-            self.screen.blit(
-                stone,
-                (
-                    (pos.x + 1) * self.g_x - self.g_x / 2 - self.g_y / 2,
-                    (pos.y + 1) * self.g_y - self.g_y / 2,
-                ),
-            )
+            if player != 3:
+                index = player * 2
         else:
-            stone = pygame.transform.scale(stone, (CELL_SIZE * 0.9, CELL_SIZE * 0.9))
-            self.screen.blit(
-                stone,
-                (
-                    pos.x * CELL_SIZE + PADDING * 1.05 - CELL_SIZE // 2,
-                    pos.y * CELL_SIZE + PADDING * 1.05 - CELL_SIZE // 2,
-                ),
-            )
+            index = player
+        stone = pygame.image.load(self.stone_text[index])
+        stone = pygame.transform.scale(stone, (self.cell_size * 0.9, self.cell_size * 0.9))
+        self.screen.blit(
+            stone,
+            (
+                pos.x * self.cell_size + self.padding * 1.05 - self.cell_size // 2,
+                pos.y * self.cell_size + self.padding * 1.05 - self.cell_size // 2,
+            ),
+        )
 
     def render_all_cells(self) -> None:
+        """
+        Render all the cells on the board by getting all the non empty cells
+        """
         indexes = np.argwhere(self.board.cells != 0)
         for index in indexes:
             y, x = index
             self.render_cell(Coord(y, x), self.board.cells[y][x])
 
     def render_last_move(self, pos: Coord) -> None:
-        if self.args.connect4 == False:
-            if self.board.last_move:
-                self.render_cell(
-                    self.board.last_move, self.board.cells[self.board.last_move]
-                )
-
-            rect_size = CELL_SIZE // 6
-            pygame.draw.rect(
-                self.screen,
-                [255, 0, 0],
-                (
-                    pos.x * CELL_SIZE + PADDING - rect_size // 2 + 1,
-                    pos.y * CELL_SIZE + PADDING - rect_size // 2 + 1,
-                    rect_size,
-                    rect_size,
-                ),
+        """
+        Render a red indicator on the last move stone
+        """
+        if self.board.last_move:
+            self.render_cell(
+                self.board.last_move, self.board.cells[self.board.last_move]
             )
-
-    def render_help_move(self, pos: Coord) -> None:
-        stone = pygame.image.load(self.stone_text[0])
-        stone = pygame.transform.scale(stone, (CELL_SIZE * 0.9, CELL_SIZE * 0.9))
-        self.screen.blit(
-            stone,
+        rect_size = self.cell_size // 6
+        pygame.draw.rect(
+            self.screen,
+            [255, 0, 0],
             (
-                pos.x * CELL_SIZE + PADDING * 1.05 - CELL_SIZE // 2,
-                pos.y * CELL_SIZE + PADDING * 1.05 - CELL_SIZE // 2,
+                pos.x * self.cell_size + self.padding - rect_size // 2 + 1,
+                pos.y * self.cell_size + self.padding - rect_size // 2 + 1,
+                rect_size,
+                rect_size,
             ),
         )
 
+    def render_help_move(self, pos: Coord) -> None:
+        """
+        Render a transparent stone at the position suggested by the engine
+        """
+        pygame.draw.circle(
+            self.screen,
+            [124, 252, 0],
+            (
+                pos.x * self.cell_size + self.padding,
+                pos.y * self.cell_size + self.padding,
+            ),
+            self.cell_size // 4,
+        )
+    
+    def render_engine_time(self, time: float) -> None:
+        """
+        Render the time taken by the engine to compute the next move
+        """
+        self.render_board(bg=True, grid=True, cells=True, update=False)
+        font = pygame.font.SysFont(None, 24)
+        img = font.render(f"{time:.4f}", True, (0, 0, 0))
+        self.screen.blit(img, (10, 10))
+    
+    def render_board(self, bg: bool = False, grid: bool = False, cells: bool = False, last_move: bool = False, update: bool = True) -> None:
+        """
+        Render the board
+        """
+        if bg:
+            self.render_background()
+        if grid:
+            if self.args.connect4:
+                self.render_holes()
+            else:
+                self.render_grid()
+        if cells:
+            self.render_all_cells()
+        if self.board.last_move and last_move:
+            self.render_last_move(self.board.last_move)
+        if update:
+            self.update()
+
     def get_valid_move(self) -> Coord | None:
-        x, y = ((p - PADDING // 2) // CELL_SIZE for p in pygame.mouse.get_pos())
+        """
+        Get the mouse position clicked by the user and return the corresponding
+        cell position if it is a valid move
+        """
+        x, y = ((p - self.padding // 2) // self.cell_size for p in pygame.mouse.get_pos())
         y = min(self.board.size - 1, max(0, y))
         x = min(self.board.size - 1, max(0, x))
         return self.board.get_valid_pos(y, x)
 
     def cancel_last_moves(self) -> None:
+        """
+        Cancel the last two moves played
+        """
         if len(self.board_history) == 0:
             return
         if len(self.board_history) <= 2:
             self.board = self.board_history[0]
             self.board_history = []
-            self.render_background()
-            self.render_board()
+            self.render_board(bg=True, grid=True)
             self.player_turn = 1
         else:
             self.board_history.pop()
             self.board = self.board_history.pop()
-            self.render_background()
-            self.render_board()
-            self.render_all_cells()
-            self.render_last_move(self.board.last_move)
-        self.update()
+            self.render_board(bg=True, grid=True, cells=True, last_move=True)
         self.game_over = False
 
     def handle_event(self) -> Coord | None:
+        """
+        Handle user input
+        """
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 sys.exit(pygame.quit())
@@ -334,80 +393,55 @@ class Display:
                     self.match_menu.menu.mainloop(self.screen)
                 elif event.key == pygame.K_BACKSPACE:
                     self.cancel_last_moves()
-
-    # Main loop of the whole game, runs until the game is over and after the start menu.
-    def run(self) -> None:
-        if not self.board:
-            self.board = Board(
-                self.args.size,
-                self.args.win_sequence,
-                self.args.capture,
-                self.args.free_double,
-                self.args.gravity,
-                self.args.debug,
-            )
-        self.render_background()
-        self.render_board()
-        self.render_all_cells()
-        if self.board.last_move:
-            self.render_last_move(self.board.last_move)
+    
+    def play_and_render_move(self, pos: Coord) -> None:
+        """
+        Play a move on the board
+        """
+        print(f"Move {max(len(self.board_history) // 2, 0)}: ", end='')
+        self.board_history.append(deepcopy(self.board))
+        self.render_cell(pos, self.player_turn)
+        self.render_last_move(pos)
+        captures = self.board.add_move(pos, self.player_turn)
+        print(f"Player {self.player_turn if self.player_turn == 1 else 2} ", end='')
+        print(f"placed a stone at {pos}")
+        if  len(captures) > 0:
+            p1, p2 = self.board.capture.values()
+            print(f"Captured {len(captures)} enemy stones ({p1} to {p2}")
+            self.render_board(bg=True, grid=True, cells=True, update=False)
+            self.render_last_move(pos)
         self.update()
-        total_time = 0
-        had_help = 0
+
+    def run(self) -> None:
+        """
+        Start the game loop
+        """
+        self.board = Board(self.args)
+        self.render_board(bg=True, grid=True, cells=True, last_move=True)
+        suggestion = False
         while True:
-            time.sleep(0.01)
+            time.sleep(0.01) # Reduces heavily the CPU usage
             pos = self.handle_event()
             if self.game_over:
                 continue
             if self.args.players[self.player_turn] == "human":
-                if self.args.move_suggestion:
-                    if had_help == 0:
-                        self.render_help_move(dumb_algo(self.board))
-                        self.update()
-                        had_help = 1
-                if not pos or (
-                    self.board.free_double
-                    and self.board.is_free_double(pos, self.player_turn)
-                ):
+                if self.args.move_suggestion and not suggestion:
+                    self.render_help_move(dumb_algo(self.board)[0])
+                    self.update()
+                    suggestion = True
+                if not pos or self.board.is_free_double(pos, self.player_turn):
                     continue
             else:
-                had_help = 0
-                start_time = time.time()
-                pos = dumb_algo(self.board)
-                end_time = time.time()
-                total_time = end_time - start_time
+                suggestion = False
+                pos, engine_time = dumb_algo(self.board)
                 if not pos:
                     self.game_over = True
                     continue
-            if total_time > 0:
-                self.render_background()
-                self.render_board()
-                self.render_all_cells()
-                font = pygame.font.SysFont(None, 24)
-                img = font.render(f"{total_time:.4f}", True, (0, 0, 0))
-                self.screen.blit(img, (10, 10))
-            move_msg = f"Move {max(len(self.board_history) // 2, 0)}: "
-            self.board_history.append(deepcopy(self.board))
-            self.render_cell(pos, self.player_turn)
-            self.render_last_move(pos)
-            captures = self.board.add_move(pos, self.player_turn)
-            move_msg += f"Player {self.player_turn if self.player_turn == 1 else 2} "
-            move_msg += f"placed a stone at {pos}"
-            if self.captures and len(captures) > 0:
-                move_msg += f" and captured {len(captures)} enemy stones\n"
-                move_msg += f"=> capture count: "
-                move_msg += f"[{self.board.capture[1]}, {self.board.capture[-1]}]"
-                self.render_background()
-                self.render_board()
-                self.render_all_cells()
-                self.render_last_move(pos)
-            print(f"{move_msg}\n")
-            self.update()
-            winner = self.board.is_game_over()
-            if winner > 0:
-                self.game_over = True
-                print(f"Game over! Winner is Player {winner}")
-            elif winner == -1:
-                self.game_over = True
-                print("Game over! Draw")
+                else:
+                    self.render_engine_time(engine_time)
+            self.play_and_render_move(pos)
             self.player_turn *= -1
+            winner = self.board.is_game_over()
+            if winner != 0:
+                self.game_over = True
+                print(f"Game over! {f'Player {winner} wins' if winner > 0 else 'Draw'}")

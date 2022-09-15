@@ -22,24 +22,24 @@ def parse_args(argv: list[str]) -> Namespace:
         metavar=("player1", "player2"),
     )
     parser.add_argument(
-        "-s",
-        "--size",
-        choices=range(3, 25),
+        "-b",
+        "--board",
+        choices=range(3, 26),
         type=int,
         default=19,
         help="Size of the board",
     )
     parser.add_argument(
         "-c",
-        "--capture",
+        "--capture-win",
         choices=range(0, 10),
         type=int,
         default=5,
         help="Number of captures to win. 0 for disabling capture",
     )
     parser.add_argument(
-        "-w",
-        "--win-sequence",
+        "-s",
+        "--sequence-win",
         choices=range(1, 10),
         type=int,
         default=5,
@@ -49,7 +49,7 @@ def parse_args(argv: list[str]) -> Namespace:
         "-c4",
         "--connect4",
         action="store_true",
-        help="Switch to connect4 gamemode instead of gomoku",
+        help="Connect4 theme. Activates the gravity mode",
     )
     parser.add_argument(
         "-m",
@@ -80,9 +80,12 @@ def parse_args(argv: list[str]) -> Namespace:
     )
 
     args = parser.parse_args(argv)
-    if args.win_sequence > args.size:
-        parser.error("Board size must be greater than the winning sequence length")
-    if args.free_double and args.win_sequence < 5:
+    if args.connect4:
+        args.gravity = True
+    if args.sequence_win > args.board:
+        print(f"Warning: Changed sequence win since it was greater than the board size")
+        print(f"New sequence win value: {args.board}")
+    if args.free_double and args.sequence_win < 5:
         args.free_double = False
         print("Warning: Free double is enabled due to winning sequence less than 5")
     return args

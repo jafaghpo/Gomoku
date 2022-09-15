@@ -3,12 +3,9 @@ import numpy as np
 from functools import cache
 from itertools import takewhile
 from typing import ClassVar
+from argparse import Namespace
 
-from gomoku.sequence import (
-    Sequence,
-    Coord,
-    Block,
-)
+from gomoku.sequence import Sequence, Coord, Block
 
 
 def slice_up(board: np.ndarray, y: int, x: int, size: int) -> tuple[int]:
@@ -113,45 +110,38 @@ class Board:
     playing: int
     children: set[Coord]
 
-    cell_values: ClassVar[np.ndarray] = None
-    size: ClassVar[int] = 19
-    sequence_win: ClassVar[int] = 5
-    capture_win: ClassVar[int] = 5
-    free_double: ClassVar[bool] = True
-    gravity: ClassVar[bool] = False
-    debug: ClassVar[bool] = False
+    # Class constants shared by all instances
+    cell_values: ClassVar[np.ndarray]
+    size: ClassVar[int]
+    sequence_win: ClassVar[int]
+    capture_win: ClassVar[int]
+    free_double: ClassVar[bool]
+    gravity: ClassVar[bool]
+    debug: ClassVar[bool]
 
-    def __init__(
-        self,
-        size: int,
-        sequence_win: int,
-        capture_win: int = 5,
-        free_double: bool = True,
-        gravity: bool = False,
-        debug: bool = False,
-    ) -> None:
-        self.cells = np.zeros((size, size), dtype=int)
+    def __init__(self, args: Namespace,) -> None:
+        self.cells = np.zeros((args.board, args.board), dtype=int)
         self.seq_map = {}
         self.seq_list = {}
         self.stones = set()
         self.children = set()
         self.last_move = None
         self.last_seq_id = 0
-        self.capture = {1: 0, -1: 0} if capture_win else None
+        self.capture = {1: 0, -1: 0} if args.capture_win else None
         self.last_chance = False
         self.playing = 1
 
-        Board.cell_values = get_cell_values(size)
-        Board.size = size
-        Board.free_double = free_double
-        Board.sequence_win = sequence_win
-        Board.capture_win = capture_win
-        Board.gravity = gravity
-        Board.debug = debug
+        Board.cell_values = get_cell_values(args.board)
+        Board.size = args.board
+        Board.free_double = args.free_double
+        Board.sequence_win = args.sequence_win
+        Board.capture_win = args.capture_win
+        Board.gravity = args.gravity
+        Board.debug = args.debug
 
-        Sequence.board_size = size
-        Sequence.sequence_win = sequence_win
-        Sequence.capture_win = capture_win
+        Sequence.board_size = args.board
+        Sequence.sequence_win = args.sequence_win
+        Sequence.capture_win = args.capture_win
 
     def __str__(self) -> str:
         player_repr = {0: ".", 1: "X", -1: "O"}
@@ -210,6 +200,8 @@ class Board:
         """
         Check if a move introduces a double free three
         """
+        if not self.free_double:
+            return False
         free_double = 0
         for id in self.seq_map.get(pos, set()):
             seq = self.seq_list[id]
@@ -430,7 +422,6 @@ class Board:
         if Board.debug:
             print(self)
         self.playing = -player
-        print(f"Children: {len(self.children)}")
         return capturable
 
     def reduce_sequence_head(self, pos: Coord, id: int) -> None:
