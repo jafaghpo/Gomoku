@@ -103,7 +103,6 @@ class Board:
     seq_map: dict[Coord, set[int]]
     seq_list: dict[int, Sequence]
     last_seq_id: int
-    last_move: Coord | None
     stones: set[Coord]
     capture: dict[int, int] | None
     last_chance: bool
@@ -119,13 +118,15 @@ class Board:
     gravity: ClassVar[bool]
     debug: ClassVar[bool]
 
-    def __init__(self, args: Namespace,) -> None:
+    def __init__(
+        self,
+        args: Namespace,
+    ) -> None:
         self.cells = np.zeros((args.board, args.board), dtype=int)
         self.seq_map = {}
         self.seq_list = {}
         self.stones = set()
         self.children = set()
-        self.last_move = None
         self.last_seq_id = 0
         self.capture = {1: 0, -1: 0} if args.capture_win else None
         self.last_chance = False
@@ -160,7 +161,6 @@ class Board:
         s += f"(Sequences: {self.sequences_score}, Stones: {self.stones_score}, "
         s += f"Capture: {self.capture_score})\n"
         s += f"Last sequence id: {self.last_seq_id}\n"
-        s += f"Last move: {self.last_move}\n"
         return s
 
     @property
@@ -238,11 +238,6 @@ class Board:
                 return seq.player if seq.player == 1 else 2
         return 0 if 0 in self.cells else -1
 
-    def get_pos_c4(self, x: int):
-        for y in range(5, -1, -1):
-            if self.cells[y, x] == 0:
-                return Coord(y, x)
-
     def get_valid_pos(self, y: int, x: int) -> Coord | None:
         """
         Get the position of the stone depending on the gravity option
@@ -253,9 +248,6 @@ class Board:
         offset = np.argmax(self.cells[::-1, x] == 0)
         if self.cells[Board.size - offset - 1, x] == 0:
             return Coord(Board.size - offset - 1, x)
-
-    def can_place_c4(self, x: int) -> bool:
-        return self.cells[(x, 0)] == 0
 
     def can_place(self, pos: Coord) -> bool:
         """
@@ -405,7 +397,6 @@ class Board:
         capturable = []
         self.cells[pos] = player
         self.stones.add(pos)
-        self.last_move = pos
         if self.capture:
             capturable = self.capturable_stones(pos, CAPTURE_MOVE_CASES)
             for stone in capturable:

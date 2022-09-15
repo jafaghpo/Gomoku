@@ -1,6 +1,6 @@
 from sys import argv
 from argparse import ArgumentParser, Namespace
-from gomoku.display import Display, GameMenu
+from gomoku.display import Display
 
 
 def parse_args(argv: list[str]) -> Namespace:
@@ -46,12 +46,6 @@ def parse_args(argv: list[str]) -> Namespace:
         help="Number of consecutive stones to win",
     )
     parser.add_argument(
-        "-c4",
-        "--connect4",
-        action="store_true",
-        help="Connect4 theme. Activates the gravity mode",
-    )
-    parser.add_argument(
         "-m",
         "--move-suggestion",
         action="store_true",
@@ -80,8 +74,6 @@ def parse_args(argv: list[str]) -> Namespace:
     )
 
     args = parser.parse_args(argv)
-    if args.connect4:
-        args.gravity = True
     if args.sequence_win > args.board:
         print(f"Warning: Changed sequence win since it was greater than the board size")
         print(f"New sequence win value: {args.board}")
@@ -95,11 +87,7 @@ def main() -> None:
     args = parse_args(argv[1:])
     args.players = {1: args.players[0], -1: args.players[1]}
     display = Display(args)
-    if len(argv) == 1:
-        game_menu = GameMenu(display)
-        game_menu.menu.mainloop(display.screen)
-    else:
-        display.run()
+    display.run()
 
 
 if __name__ == "__main__":
