@@ -5,7 +5,7 @@ from itertools import takewhile
 from typing import ClassVar
 from argparse import Namespace
 
-from gomoku.sequence import Sequence, Coord, Block
+from gomoku.sequence import MAX_SCORE, BASE_SCORE, Sequence, Coord, Block
 
 
 def slice_up(board: np.ndarray, y: int, x: int, size: int) -> tuple[int]:
@@ -79,8 +79,7 @@ DIRECTIONS = tuple(map(Coord._make, ((0, -1), (-1, -1), (-1, 0), (-1, 1))))
 
 CAPTURE_MOVE_CASES = ((-1, 1, 1, -1), (1, -1, -1, 1))
 
-# Score ratio of capture compared to sequence
-BASE_CAPTURE_SCORE = 5
+NEXT_TURN_BONUS = BASE_SCORE // 3
 
 
 def get_cell_values(size: int) -> np.ndarray:
@@ -185,9 +184,17 @@ class Board:
         Score of all sequences on the board
         """
         score = {1: 0, -1: 0}
+        best = 0
         for seq in self.seq_list.values():
-            score[seq.player] += seq.score(self.capture)
-        return sum(score.values())
+            current = seq.score(self.capture) * seq.player
+            print(f"current: {current}, seq player: {seq.player}, next turn: {-self.playing}")
+            if seq.player == -self.playing and current > best:
+                print(f"Sequence {seq.id} score: {current}")    
+                best = current
+            else:
+                score[seq.player] += current * seq.player
+        print(f"Best sequence score: {best * NEXT_TURN_BONUS * -self.playing}")
+        return sum(score.values()) + (best * NEXT_TURN_BONUS * -self.playing)
 
     @property
     def score(self) -> int:

@@ -5,10 +5,10 @@ from functools import cache
 from typing import ClassVar, Iterator
 import copy
 
-MAX_SCORE = 1e15
-BASE_SCORE = 10
-CAPTURE_BASE_SCORE = 5
-BLOCK_PENALTY = 4
+MAX_SCORE = int(1e15)
+BASE_SCORE = 20
+CAPTURE_BASE_SCORE = BASE_SCORE // 2
+BLOCK_PENALTY = BASE_SCORE // 2 + 1
 
 
 class Block(IntEnum):
@@ -368,8 +368,8 @@ class Sequence:
                 shape = shape[:-1]
             elif n == 2:
                 shape = shape[1:-1]
-        block_penalty = BLOCK_PENALTY if self.is_blocked != Block.NO else 0
-        base = BASE_SCORE - self.nb_holes - block_penalty
+        block_penalty = BLOCK_PENALTY * int(self.is_blocked != Block.NO)
+        base = max(BASE_SCORE - (self.nb_holes * 2) - block_penalty, 2)
         seq_score = Sequence.seq_score(shape, base) * self.player
         return seq_score + capture_score
 

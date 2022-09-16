@@ -271,7 +271,7 @@ class Display:
         print(f"placed a stone at {move}")
         if len(captures) > 0:
             p1, p2 = self.board.capture.values()
-            print(f"Captured {len(captures)} enemy stones ({p1} to {p2}")
+            print(f"Captured {len(captures)} enemy stones ({p1} to {p2})")
             self.render_board(bg=True, grid=True, cells=True, update=False)
             self.render_last_move(move)
         self.update()
