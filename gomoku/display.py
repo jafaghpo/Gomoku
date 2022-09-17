@@ -5,7 +5,7 @@ import sys
 import time
 from copy import deepcopy
 from gomoku.board import Board, Coord
-from gomoku.engine import dumb_algo
+from gomoku.engine import Engine
 
 SCREEN_SIZE = 1000
 LINE_WIDTH = 2
@@ -281,6 +281,7 @@ class Display:
         Start the game loop
         """
         self.board = Board(self.args)
+        engine = Engine(self.args.time, self.args.depth)
         self.render_board(bg=True, grid=True, cells=True, last_move=True)
         suggestion = False
         while True:
@@ -290,14 +291,14 @@ class Display:
                 continue
             if self.args.players[self.player_turn] == "human":
                 if self.args.move_suggestion and not suggestion:
-                    suggestion, _ = dumb_algo(self.board)
+                    suggestion, _ = engine.search_best_move(self.board)
                     self.render_indicator(suggestion, SUGGESTED_MOVE_COLOR)
                     self.update()
                     suggestion = True
                 if not move or self.board.is_free_double(move, self.player_turn):
                     continue
             else:
-                move, engine_time = dumb_algo(self.board)
+                move, engine_time = engine.search_best_move(self.board)
                 if not move:
                     self.game_over = True
                     continue

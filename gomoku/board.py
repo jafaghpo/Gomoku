@@ -5,7 +5,7 @@ from itertools import takewhile
 from typing import ClassVar
 from argparse import Namespace
 
-from gomoku.sequence import MAX_SCORE, BASE_SCORE, Sequence, Coord, Block
+from gomoku.sequence import BASE_SCORE, Sequence, Coord, Block
 
 
 def slice_up(board: np.ndarray, y: int, x: int, size: int) -> tuple[int]:
@@ -106,7 +106,7 @@ class Board:
     capture: dict[int, int] | None
     last_chance: bool
     playing: int
-    children: set[Coord]
+    successors: set[Coord]
 
     # Class constants shared by all instances
     cell_values: ClassVar[np.ndarray]
@@ -125,7 +125,7 @@ class Board:
         self.seq_map = {}
         self.seq_list = {}
         self.stones = set()
-        self.children = set()
+        self.successors = set()
         self.last_seq_id = 0
         self.capture = {1: 0, -1: 0} if args.capture_win else None
         self.last_chance = False
@@ -161,6 +161,18 @@ class Board:
         s += f"Capture: {self.capture_score})\n"
         s += f"Last sequence id: {self.last_seq_id}\n"
         return s
+    
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Board):
+            return False
+        return (
+            self.cells == other.cells
+            and self.capture == other.capture
+            and self.playing == other.playing
+        )
+    
+    def __hash__(self) -> int:
+        return hash((self.cells, self.capture, self.playing))
 
     @property
     def capture_score(self) -> int:
@@ -187,13 +199,10 @@ class Board:
         best = 0
         for seq in self.seq_list.values():
             current = seq.score(self.capture) * seq.player
-            print(f"current: {current}, seq player: {seq.player}, next turn: {-self.playing}")
             if seq.player == -self.playing and current > best:
-                print(f"Sequence {seq.id} score: {current}")    
                 best = current
             else:
                 score[seq.player] += current * seq.player
-        print(f"Best sequence score: {best * NEXT_TURN_BONUS * -self.playing}")
         return sum(score.values()) + (best * NEXT_TURN_BONUS * -self.playing)
 
     @property
@@ -414,15 +423,15 @@ class Board:
                 self.update_sequences_at_removed_stone(stone)
         self.update_sequences_at_added_stone(pos, player)
         if len(capturable) > 0:
-            self.children = self.get_children()
+            self.successors = self.get_successors()
         else:
-            self.update_children(pos)
+            self.update_successors(pos)
         if Board.debug:
             print(self)
         self.playing = -player
         return capturable
 
-    def reduce_sequence_head(self, pos: Coord, id: int) -> None:
+    def reduce_sequence_head(self, id: int) -> None:
         """
         Remove the start of a sequence.
         """
@@ -436,7 +445,7 @@ class Board:
         seq.spaces = min(seq.spaces[0], Board.sequence_win - 1), seq.spaces[1]
         self.add_sequence_spaces(id)
 
-    def reduce_sequence_tail(self, pos: Coord, id: int) -> None:
+    def reduce_sequence_tail(self, id: int) -> None:
         """
         Remove the end of a sequence.
         """
@@ -494,10 +503,10 @@ class Board:
         for id in self.seq_map.get(pos, set()).copy():
             seq = self.seq_list[id]
             if pos == seq.start:
-                self.reduce_sequence_head(pos, id)
+                self.reduce_sequence_head(id)
                 visited.add(seq.dir)
             elif pos == seq.end:
-                self.reduce_sequence_tail(pos, id)
+                self.reduce_sequence_tail(id)
                 visited.add(-seq.dir)
             elif pos in seq.block_cells:
                 self.replace_sequence(id)
@@ -521,27 +530,27 @@ class Board:
                 capturable.extend([pos + dir, pos + dir + dir])
         return capturable
 
-    def get_children_around_stone(self, pos: Coord) -> list[Coord]:
+    def get_successors_around_stone(self, pos: Coord) -> list[Coord]:
         """
         Returns a list of positions around the given position.
         """
         return [pos + off for off in NEIGHBORS_OFFSET if self.can_place(pos + off)]
 
-    def get_children(self) -> set[Coord]:
+    def get_successors(self) -> set[Coord]:
         """
         Returns the coordinates of the neighbor cells of all stones in a 2-cell radius
         """
-        children = set()
+        successors = set()
         for stone in self.stones:
-            children.update(self.get_children_around_stone(stone))
-        return children
+            successors.update(self.get_successors_around_stone(stone))
+        return successors
 
-    def update_children(self, pos: Coord) -> None:
+    def update_successors(self, pos: Coord) -> None:
         """
-        Update the children of the board.
+        Update the successors of the board.
         """
-        self.children.update(self.get_children_around_stone(pos))
-        self.children.discard(pos)
+        self.successors.update(self.get_successors_around_stone(pos))
+        self.successors.discard(pos)
 
     @staticmethod
     @cache

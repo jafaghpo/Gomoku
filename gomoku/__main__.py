@@ -10,6 +10,7 @@ def parse_args(argv: list[str]) -> Namespace:
         "--time",
         type=int,
         default=500,
+        choices=range(100, 5000, 100),
         help="time limit for engine move in milliseconds",
     )
     parser.add_argument(
@@ -71,6 +72,13 @@ def parse_args(argv: list[str]) -> Namespace:
         help="""Enable if specified the possibility to place a stone that introduces
         an unstoppable double free sequence scenario
         (enabled for winning sequence less than 5)""",
+    )
+    parser.add_argument(
+        "--depth",
+        type=int,
+        choices=range(1, 11),
+        default=10,
+        help="Depth of the engine search",
     )
 
     args = parser.parse_args(argv)
