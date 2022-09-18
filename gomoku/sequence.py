@@ -6,9 +6,9 @@ from typing import ClassVar, Iterator
 import copy
 
 MAX_SCORE = int(1e15)
-BASE_SCORE = 20
+BASE_SCORE = 15
 CAPTURE_BASE_SCORE = BASE_SCORE // 2
-BLOCK_PENALTY = BASE_SCORE // 2 + 1
+BLOCK_PENALTY = BASE_SCORE // 4
 
 
 class Block(IntEnum):
@@ -369,7 +369,7 @@ class Sequence:
             elif n == 2:
                 shape = shape[1:-1]
         block_penalty = BLOCK_PENALTY * int(self.is_blocked != Block.NO)
-        base = max(BASE_SCORE - (self.nb_holes * 2) - block_penalty, 2)
+        base = max(BASE_SCORE - self.nb_holes - block_penalty, 2)
         seq_score = Sequence.seq_score(shape, base) * self.player
         return seq_score + capture_score
 

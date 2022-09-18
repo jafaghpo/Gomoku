@@ -286,16 +286,16 @@ class Display:
         suggestion = False
         while True:
             time.sleep(0.01)  # Reduces heavily the CPU usage
-            move = self.handle_event()
+            pos = self.handle_event()
             if self.game_over:
                 continue
             if self.args.players[self.player_turn] == "human":
                 if self.args.move_suggestion and not suggestion:
                     suggestion, _ = engine.search_best_move(self.board)
-                    self.render_indicator(suggestion, SUGGESTED_MOVE_COLOR)
+                    self.render_indicator(suggestion.coord, SUGGESTED_MOVE_COLOR)
                     self.update()
                     suggestion = True
-                if not move or self.board.is_free_double(move, self.player_turn):
+                if not pos or self.board.is_free_double(pos, self.player_turn):
                     continue
             else:
                 move, engine_time = engine.search_best_move(self.board)
@@ -304,7 +304,8 @@ class Display:
                     continue
                 else:
                     self.render_engine_time(engine_time)
-            self.play_and_render_move(move)
+                    pos = move.coord
+            self.play_and_render_move(pos)
             self.player_turn *= -1
             suggestion = False
             winner = self.board.is_game_over()

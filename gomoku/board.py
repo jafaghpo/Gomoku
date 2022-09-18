@@ -4,6 +4,7 @@ from functools import cache
 from itertools import takewhile
 from typing import ClassVar
 from argparse import Namespace
+import copy
 
 from gomoku.sequence import BASE_SCORE, Sequence, Coord, Block
 
@@ -160,6 +161,7 @@ class Board:
         s += f"(Sequences: {self.sequences_score}, Stones: {self.stones_score}, "
         s += f"Capture: {self.capture_score})\n"
         s += f"Last sequence id: {self.last_seq_id}\n"
+        s += f"Playing: {self.playing}\n"
         return s
     
     def __eq__(self, other: object) -> bool:
@@ -172,7 +174,11 @@ class Board:
         )
     
     def __hash__(self) -> int:
-        return hash((self.cells, self.capture, self.playing))
+        return hash(self.cells.tobytes() + str(self.capture).encode() + str(self.playing).encode())
+    
+    @property
+    def bitboard(self) -> int:
+        return self.cells.sum()
 
     @property
     def capture_score(self) -> int:
@@ -211,6 +217,15 @@ class Board:
         Static evaluation of the board
         """
         return self.sequences_score + self.stones_score + self.capture_score
+    
+    def copy(self, coord: Coord | None = None) -> "Board":
+        """
+        Copy the board and add a move if given
+        """
+        new_board = copy.deepcopy(self)
+        if coord is not None:
+            new_board.add_move(coord)
+        return new_board
 
     def is_free_double(self, pos: Coord, player: int) -> bool:
         """
@@ -235,15 +250,21 @@ class Board:
                     if p.in_range(Board.size) and self.cells[p] != -player:
                         free_double += 1
         return free_double >= 2
+    
+    def is_capture_win(self) -> bool:
+        """
+        Check if a capture win is possible
+        """
+        return self.capture and max(self.capture.values()) >= Board.capture_win
 
     def is_game_over(self) -> int:
         """
         Check if the game is over.
         """
-        if self.capture and any(
-            c >= Sequence.capture_win for c in self.capture.values()
-        ):
-            return 1 if self.capture[1] >= Sequence.capture_win else 2
+        if self.is_capture_win():
+            return 1 if self.capture[1] >= Board.capture_win else 2
+        if len(self.stones) // 2 + 1 < Board.sequence_win:
+            return 0
         for seq in self.seq_list.values():
             if seq.is_win:
                 if not self.capture or self.last_chance:
@@ -405,11 +426,13 @@ class Board:
         for d in visited.intersection(DIRECTIONS).symmetric_difference(DIRECTIONS):
             self.add_sequence(self.get_sequence(pos, d, player))
 
-    def add_move(self, pos: Coord, player: int) -> list[Coord]:
+    def add_move(self, pos: Coord, player: int = 0) -> list[Coord]:
         """
         Adds a move to the board by placing the player's stone id at the given position
         and updating the sequences around the new stone.
         """
+        if not player:
+            player = self.playing
         capturable = []
         self.cells[pos] = player
         self.stones.add(pos)
