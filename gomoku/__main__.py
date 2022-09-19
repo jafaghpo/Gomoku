@@ -10,8 +10,9 @@ def parse_args(argv: list[str]) -> Namespace:
         "--time",
         type=int,
         default=500,
-        choices=range(100, 300100, 100),
-        help="time limit for engine move in milliseconds",
+        choices=range(500, 100001, 500),
+        metavar="TIME",
+        help="time limit for engine move in milliseconds (default: 500)",
     )
     parser.add_argument(
         "-p",
@@ -77,7 +78,7 @@ def parse_args(argv: list[str]) -> Namespace:
         "--depth",
         type=int,
         choices=range(1, 11),
-        default=10,
+        default=1,
         help="Depth of the engine search",
     )
 
