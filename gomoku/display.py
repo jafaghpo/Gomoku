@@ -7,7 +7,7 @@ from copy import deepcopy
 from gomoku.board import Board, Coord
 from gomoku.engine import Engine
 
-SCREEN_SIZE = 1000
+SCREEN_SIZE = 800
 LINE_WIDTH = 2
 
 LAST_MOVE_COLOR = (220, 20, 60)

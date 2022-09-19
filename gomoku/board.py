@@ -108,6 +108,7 @@ class Board:
     last_chance: bool
     playing: int
     successors: set[Coord]
+    last_move: Coord | None = None
 
     # Class constants shared by all instances
     cell_values: ClassVar[np.ndarray]
@@ -177,8 +178,16 @@ class Board:
         return hash(self.cells.tobytes() + str(self.capture).encode() + str(self.playing).encode())
     
     @property
-    def bitboard(self) -> int:
-        return self.cells.sum()
+    def best_sequence_cost_cells(self) -> tuple[Coord]:
+        best_seq, best_score = None, -1e20
+        for seq in self.seq_list.values():
+            current = seq.score(self.capture) * seq.player
+            if seq.player == -self.playing:
+                current *= NEXT_TURN_BONUS * -self.playing
+            if current > best_score:
+                best_seq = seq
+                best_score = current
+        return best_seq.cost_cells
 
     @property
     def capture_score(self) -> int:
@@ -387,7 +396,10 @@ class Board:
             return self.remove_sequence(id)
         self.remove_sequence_spaces(pos, id, block, from_list=True)
         if to_list:
-            seq.is_blocked = Block(block + seq.is_blocked)
+            if block + seq.is_blocked > 3:
+                seq.is_blocked = Block(block)
+            else:
+                seq.is_blocked = Block(block + seq.is_blocked)
         if pos.in_range(Board.size):
             self.seq_map.setdefault(pos, set()).add(seq.id)
 
@@ -435,6 +447,7 @@ class Board:
             player = self.playing
         capturable = []
         self.cells[pos] = player
+        self.last_move = pos
         self.stones.add(pos)
         if self.capture:
             capturable = self.capturable_stones(pos, CAPTURE_MOVE_CASES)

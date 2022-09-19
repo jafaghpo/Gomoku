@@ -10,7 +10,7 @@ def parse_args(argv: list[str]) -> Namespace:
         "--time",
         type=int,
         default=500,
-        choices=range(100, 5000, 100),
+        choices=range(100, 300100, 100),
         help="time limit for engine move in milliseconds",
     )
     parser.add_argument(
@@ -33,7 +33,7 @@ def parse_args(argv: list[str]) -> Namespace:
     parser.add_argument(
         "-c",
         "--capture-win",
-        choices=range(0, 10),
+        choices=range(0, 21),
         type=int,
         default=5,
         help="Number of captures to win. 0 for disabling capture",

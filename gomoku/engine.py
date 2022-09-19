@@ -1,7 +1,7 @@
-from audioop import reverse
 from gomoku.board import Board, Coord
 from time import time
 from dataclasses import dataclass, field
+import random
 
 BIG_NUM = int(1e20)
 
@@ -61,8 +61,6 @@ class Successors:
         self.lst = [move for move in self.lst if move.score is not None]
 
     def sort(self) -> None:
-        if self[0].score is None:
-            return
         self.filter()
         self.lst.sort(reverse=self.player == -1)
 
@@ -104,39 +102,6 @@ class Engine:
         """
         return self.time_elapsed() > self.time_limit - 100
     
-    def minimax(self, depth: int) -> int:
-        """
-        Minimax algorithm
-        """
-        if depth == 0 or self.last_state.is_game_over() or self.is_timeout():
-            self.last_state.playing = -self.last_state.playing
-            return self.last_state.score
-        moves = None
-        if hash(self.last_state) in self.memory:
-            moves = self.memory[hash(self.last_state)]
-        else:
-            moves = Successors(self.last_state, depth)
-        if self.last_state.playing == 1:
-            value = -BIG_NUM
-            for i in range(len(moves)):
-                state = self.last_state.copy(moves[i].coord)
-                self.state_stack.append(state)
-                moves[i].score = max(value, self.minimax(depth - 1))
-                self.state_stack.pop()
-            moves.sort()
-            self.memory[hash(self.last_state)] = moves
-            return value
-        else:
-            value = BIG_NUM
-            for i in range(len(moves)):
-                state = self.last_state.copy(moves[i].coord)
-                self.state_stack.append(state)
-                moves[i].score = min(value, self.minimax(depth - 1))
-                self.state_stack.pop()
-            moves.sort()
-            self.memory[hash(self.last_state)] = moves
-            return value
-    
     def maximize(self, moves: Successors, depth: int, alpha: int, beta: int) -> int:
         """
         Returns the best move for the maximizing player
@@ -152,7 +117,8 @@ class Engine:
                 break # Beta cut-off
             moves[i].score = value
         moves.sort()
-        self.memory[hash(self.last_state)] = moves
+        if moves.lst:
+            self.memory[hash(self.last_state)] = moves
         return value
     
     def minimize(self, moves: Successors, depth: int, alpha: int, beta: int) -> int:
@@ -170,7 +136,7 @@ class Engine:
                 break # Alpha cut-off
             moves[i].score = value
         moves.sort()
-        if moves[0].score is not None:
+        if moves.lst:
             self.memory[hash(self.last_state)] = moves
         return value
     
@@ -191,7 +157,7 @@ class Engine:
         else:
             return self.minimize(moves, depth, alpha, beta)
 
-    def MTDf_search(self, root: Board, depth: int, prev_best: Move | None) -> Move:
+    def MTDf_search(self, root: Board, depth: int, prev_best: Move | None) -> Move | None:
         """
         MTDf search algorithm
         """
@@ -206,6 +172,8 @@ class Engine:
                 upper_bound = guess
             else:
                 lower_bound = guess
+        if not hash(root) in self.memory:
+            return None
         return self.memory[hash(root)].best
     
     def first_move(self, root: Board) -> Move:
@@ -216,18 +184,33 @@ class Engine:
         if root.cells[y][x] == 0:
             return Move(Coord(y, x), root.score + root.cell_values[y][x])
         return Move(Coord(y - 1, x - 1), root.score + root.cell_values[y - 1][x - 1])
+    
+    def quick_move(self, root: Board) -> Move:
+        """
+        Returns the best move with using a quick heuristic if the engine ran out of time
+        to find a move
+        """
+        print(f"Using quick heuristic")
+        cells = root.best_sequence_cost_cells
+        if not cells:
+            return Move(random.choice(list(root.successors)))
+        return Move(random.choice(cells))
 
     def search_best_move(self, root: Board) -> tuple[Move | None, int]:
         """
         Uses an iterative deepening with MTDf search algorithm to find the best move
         """
         self.start_time = time()
-        best_move = None
+        best = None
         if len(root.stones) < 2:
             return self.first_move(root), self.time_elapsed()
         for depth in range(1, self.max_depth + 1):
             if self.is_timeout():
-                print("Time limit reached !")
+                print(f"Time limit reached for depth {depth}")
                 break
-            best_move = self.MTDf_search(root, depth, best_move)
-        return best_move, self.time_elapsed()
+            current = self.MTDf_search(root, depth, best)
+            if current is None:
+                print(f"Time limit reached for depth {depth}")
+                break
+            best = current
+        return best if best else self.quick_move(root), self.time_elapsed()
