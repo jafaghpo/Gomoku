@@ -82,7 +82,6 @@ CAPTURE_MOVE_CASES = ((-1, 1, 1, -1), (1, -1, -1, 1))
 
 NEXT_TURN_BONUS = BASE_SCORE // 3
 
-
 def get_cell_values(size: int) -> np.ndarray:
     array = np.zeros((size, size), dtype=int)
     for y in range(size // 2 + 1):
@@ -103,12 +102,12 @@ class Board:
     seq_map: dict[Coord, set[int]]
     seq_list: dict[int, Sequence]
     last_seq_id: int
-    stones: set[Coord]
+    stones: list[Coord]
     capture: dict[int, int] | None
     last_chance: bool
     playing: int
     successors: set[Coord]
-    last_move: Coord | None = None
+    move_history: list[Coord, list[Coord]]
 
     # Class constants shared by all instances
     cell_values: ClassVar[np.ndarray]
@@ -126,12 +125,13 @@ class Board:
         self.cells = np.zeros((args.board, args.board), dtype=int)
         self.seq_map = {}
         self.seq_list = {}
-        self.stones = set()
+        self.stones = []
         self.successors = set()
         self.last_seq_id = 0
         self.capture = {1: 0, -1: 0} if args.capture_win else None
         self.last_chance = False
         self.playing = 1
+        self.move_history = []
 
         Board.cell_values = get_cell_values(args.board)
         Board.size = args.board
@@ -437,6 +437,24 @@ class Board:
                 self.add_block_to_sequence(pos, id, block, to_list=True)
         for d in visited.intersection(DIRECTIONS).symmetric_difference(DIRECTIONS):
             self.add_sequence(self.get_sequence(pos, d, player))
+    
+    def undo_last_move(self) -> None:
+        """
+        Undo the last move.
+        """
+        move, captures = self.move_history.pop()
+        self.cells[move] = 0
+        self.stones.remove(move)
+        self.update_sequences_at_removed_stone(move)
+        if captures:
+            self.capture[-self.playing] -= len(captures) // 2
+            for pos in captures:
+                self.cells[pos] = self.playing
+                self.stones.append(pos)
+                self.update_sequences_at_added_stone(pos, self.playing)
+        self.successors = self.get_successors()
+        self.playing *= -1
+    
 
     def add_move(self, pos: Coord, player: int = 0) -> list[Coord]:
         """
@@ -447,8 +465,7 @@ class Board:
             player = self.playing
         capturable = []
         self.cells[pos] = player
-        self.last_move = pos
-        self.stones.add(pos)
+        self.stones.append(pos)
         if self.capture:
             capturable = self.capturable_stones(pos, CAPTURE_MOVE_CASES)
             for stone in capturable:
@@ -462,6 +479,7 @@ class Board:
             self.successors = self.get_successors()
         else:
             self.update_successors(pos)
+        self.move_history.append((pos, capturable))
         if Board.debug:
             print(self)
         self.playing = -player

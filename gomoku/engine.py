@@ -86,10 +86,6 @@ class Engine:
     memory: dict[int, Successors] = field(default_factory=dict)
     start_time: float = 0
 
-    @property
-    def last_state(self):
-        return self.state_stack[-1]
-
     def time_elapsed(self) -> int:
         """
         Returns the time elapsed (in milliseconds) since the given start time
@@ -102,60 +98,58 @@ class Engine:
         """
         return self.time_elapsed() > self.time_limit - 100
     
-    def maximize(self, moves: Successors, depth: int, alpha: int, beta: int) -> int:
+    def maximize(self, state: Board, moves: Successors, depth: int, alpha: int, beta: int) -> int:
         """
         Returns the best move for the maximizing player
         """
         value = -BIG_NUM
         for i in range(len(moves)):
-            state = self.last_state.copy(moves[i].coord)
-            self.state_stack.append(state)
-            value = max(value, self.alpha_beta(depth - 1, alpha, beta))
-            self.state_stack.pop()
+            state.add_move(moves[i].coord)
+            value = max(value, self.alpha_beta(state, depth - 1, alpha, beta))
+            state.undo_last_move()
             alpha = max(alpha, value)
             if value >= beta:
                 break # Beta cut-off
             moves[i].score = value
         moves.sort()
         if moves.lst:
-            self.memory[hash(self.last_state)] = moves
+            self.memory[hash(state)] = moves
         return value
     
-    def minimize(self, moves: Successors, depth: int, alpha: int, beta: int) -> int:
+    def minimize(self, state: Board, moves: Successors, depth: int, alpha: int, beta: int) -> int:
         """
         Returns the best move for the minimizing player
         """
         value = BIG_NUM
         for i in range(len(moves)):
-            state = self.last_state.copy(moves[i].coord)
-            self.state_stack.append(state)
-            value = min(value, self.alpha_beta(depth - 1, alpha, beta))
-            self.state_stack.pop()
+            state.add_move(moves[i].coord)
+            value = min(value, self.alpha_beta(state, depth - 1, alpha, beta))
+            state.undo_last_move()
             beta = min(beta, value)
             if value <= alpha:
                 break # Alpha cut-off
             moves[i].score = value
         moves.sort()
         if moves.lst:
-            self.memory[hash(self.last_state)] = moves
+            self.memory[hash(state)] = moves
         return value
     
-    def alpha_beta(self, depth: int, alpha: int, beta: int) -> int:
+    def alpha_beta(self, state: Board, depth: int, alpha: int, beta: int) -> int:
         """
         Alpha-beta pruning algorithm
         """
-        if depth == 0 or self.last_state.is_game_over() or self.is_timeout():
-            self.last_state.playing *= -1
-            return self.last_state.score
+        if depth == 0 or state.is_game_over() or self.is_timeout():
+            # state.playing *= -1
+            return state.score
         moves = None
-        if hash(self.last_state) in self.memory:
-            moves = self.memory[hash(self.last_state)]
+        if hash(state) in self.memory:
+            moves = self.memory[hash(state)]
         else:
-            moves = Successors(self.last_state, depth)
-        if self.last_state.playing == 1:
-            return self.maximize(moves, depth, alpha, beta)
+            moves = Successors(state, depth)
+        if state.playing == 1:
+            return self.maximize(state, moves, depth, alpha, beta)
         else:
-            return self.minimize(moves, depth, alpha, beta)
+            return self.minimize(state, moves, depth, alpha, beta)
 
     def MTDf_search(self, root: Board, depth: int, prev_best: Move | None) -> Move | None:
         """
@@ -167,7 +161,7 @@ class Engine:
         self.state_stack.append(root)
         while lower_bound < upper_bound:
             beta = max(guess, lower_bound + 1)
-            guess = self.alpha_beta(depth, beta - 1, beta)
+            guess = self.alpha_beta(root, depth, beta - 1, beta)
             if guess < beta:
                 upper_bound = guess
             else:

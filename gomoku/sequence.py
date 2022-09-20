@@ -140,12 +140,7 @@ class Sequence:
         """
         Returns the number of holes in the sequence.
         """
-
-        @cache
-        def _nb_holes(shape):
-            return len(shape) - 1
-
-        return _nb_holes(self.shape)
+        return len(self.shape) - 1
 
     @property
     def length(self) -> int:
@@ -311,11 +306,7 @@ class Sequence:
         )
 
     def __len__(self) -> int:
-        @cache
-        def _stones(shape):
-            return sum(shape)
-
-        return _stones(self.shape)
+        return sum(self.shape)
 
     def __contains__(self, coord: Coord) -> bool:
         return coord in self.rest_cells
