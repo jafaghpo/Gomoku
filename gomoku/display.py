@@ -16,6 +16,121 @@ SUGGESTED_MOVE_COLOR = (50, 205, 50)
 TEXT_PATH = "./assets/textures"
 
 
+class OptionMenu:
+    def __init__(self, display):
+        self.menu = pygame_menu.Menu(
+            "Options",
+            display.screen_size,
+            display.screen_size,
+            theme=pygame_menu.themes.THEME_DARK,
+        )
+        self.display = display
+        self.menu.add.dropselect(
+            title="Pick a board size",
+            items=[
+                ("10", 10),
+                ("11", 11),
+                ("12", 12),
+                ("13", 13),
+                ("14", 14),
+                ("15", 15),
+                ("16", 16),
+                ("17", 17),
+                ("18", 18),
+                ("19", 19),
+                ("20", 20),
+                ("21", 21),
+                ("22", 22),
+                ("23", 23),
+                ("24", 24),
+            ],
+            font_size=20,
+            default=9,
+            open_middle=True,  # Opens in the middle of the menu
+            selection_box_height=5,
+            selection_box_width=212,
+            selection_infinite=True,
+            selection_option_font_size=20,
+            onchange=self.on_board_size_change,
+        )
+        self.menu.add.text_input(
+            "Algo time limit (ms): ",
+            default="500",
+            maxchar=4,
+            onchange=self.on_time_change,
+        )
+
+        self.menu.add.button("Return to main menu", pygame_menu.events.RESET)
+
+    def on_board_size_change(self, value: tuple, board_size: str):
+        selected, index = value
+        print(f'Selected difficulty: "{selected}" ({board_size}) at index {index}')
+        self.display.args.size = int(board_size)
+        self.display.screen_size = BASE_SIZE + (self.display.args.size - 1) * CELL_SIZE
+
+    def on_time_change(self, time: str):
+        selected = time
+        print(f'Algo time limit (ms): "{selected}" ({time})')
+        self.display.args.time = selected
+
+
+class GameMenu:
+    """
+    Game menu that appears when the game is started, contains the option menu
+    Options are:
+    - Access to Option Menu
+    - Player type and order
+    - Quit the game
+    """
+
+    def __init__(self, display):
+        self.menu = pygame_menu.Menu(
+            "Gomoku",
+            display.screen_size,
+            display.screen_size,
+            theme=pygame_menu.themes.THEME_DARK,
+        )
+        self.display = display
+        self.player1_type = "human"
+        self.player2_type = "engine"
+        self.menu.add.button("Start", self.on_start)
+        self.menu.add.selector(
+            "Player 1",
+            [("Human", "human"), ("Engine", "engine")],
+            onchange=self.on_player1_change,
+        )
+        self.menu.add.selector(
+            "Player 2",
+            [("Engine", "engine"), ("Human", "human")],
+            onchange=self.on_player2_change,
+        )
+        option_menu = OptionMenu(self.display)
+        self.menu.add.button("Options", option_menu.menu)
+        self.menu.add.button("Quit", self.on_quit)
+
+    def on_player1_change(self, value: tuple, player: str):
+        selected, index = value
+        print(f'Selected difficulty: "{selected}" ({player}) at index {index}')
+        self.player1_type = selected[1]
+
+    def on_player2_change(self, value: tuple, player: str):
+        selected, index = value
+        print(f'Selected difficulty: "{selected}" ({player}) at index {index}')
+        self.player2_type = selected[1]
+
+    def on_start(self):
+        self.display.args.players = [self.player1_type, self.player2_type]
+        print("final args:")
+        print(self.display.args)
+        self.display.screen = pygame.display.set_mode(
+            (self.display.screen_size, self.display.screen_size)
+        )
+        self.menu.close(self.display.run())
+
+    def on_quit(self):
+        sys.exit(pygame.quit())
+
+
 class PauseMenu:
     """
     Pause the game and display the pause menu.
