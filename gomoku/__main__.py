@@ -1,6 +1,6 @@
 from sys import argv
 from argparse import ArgumentParser, Namespace
-from gomoku.display import Display
+from gomoku.display import Display, GameMenu
 
 
 def parse_args(argv: list[str]) -> Namespace:
@@ -96,7 +96,11 @@ def main() -> None:
     args = parse_args(argv[1:])
     args.players = {1: args.players[0], -1: args.players[1]}
     display = Display(args)
-    display.run()
+    if len(argv) == 1:
+        game_menu = GameMenu(display)
+        game_menu.menu.mainloop(display.screen)
+    else:
+        display.run()
 
 
 if __name__ == "__main__":

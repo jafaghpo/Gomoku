@@ -28,6 +28,13 @@ class OptionMenu:
         self.menu.add.dropselect(
             title="Pick a board size",
             items=[
+                ("3", 3),
+                ("4", 4),
+                ("5", 5),
+                ("6", 6),
+                ("7", 7),
+                ("8", 8),
+                ("9", 9),
                 ("10", 10),
                 ("11", 11),
                 ("12", 12),
@@ -43,20 +50,102 @@ class OptionMenu:
                 ("22", 22),
                 ("23", 23),
                 ("24", 24),
+                ("25", 25),
+                ("26", 26),
             ],
             font_size=20,
-            default=9,
+            default=16,
             open_middle=True,  # Opens in the middle of the menu
-            selection_box_height=5,
+            selection_box_height=20,
             selection_box_width=212,
             selection_infinite=True,
             selection_option_font_size=20,
             onchange=self.on_board_size_change,
         )
-        self.menu.add.text_input(
-            "Algo time limit (ms): ",
-            default="500",
-            maxchar=4,
+        self.menu.add.dropselect(
+            title="Capture to win",
+            items=[
+                ("disabled", 0),
+                ("1", 1),
+                ("2", 2),
+                ("3", 3),
+                ("4", 4),
+                ("5", 5),
+                ("6", 6),
+                ("7", 7),
+                ("8", 8),
+                ("9", 9),
+                ("10", 10),
+                ("11", 11),
+                ("12", 12),
+                ("13", 13),
+                ("14", 14),
+                ("15", 15),
+                ("16", 16),
+                ("17", 17),
+                ("18", 18),
+                ("19", 19),
+                ("20", 20),
+                ("21", 21),
+            ],
+            font_size=20,
+            default=5,
+            open_middle=True,  # Opens in the middle of the menu
+            selection_box_height=20,
+            selection_box_width=212,
+            selection_infinite=True,
+            selection_option_font_size=20,
+            onchange=self.on_capture_win_change,
+        )
+        self.menu.add.dropselect(
+            title="sequence to win",
+            items=[
+                ("3", 3),
+                ("4", 4),
+                ("5", 5),
+                ("6", 6),
+                ("7", 7),
+                ("8", 8),
+                ("9", 9),
+                ("10", 10),
+            ],
+            font_size=20,
+            default=2,
+            open_middle=True,  # Opens in the middle of the menu
+            selection_box_height=20,
+            selection_box_width=212,
+            selection_infinite=True,
+            selection_option_font_size=20,
+            onchange=self.on_sequence_win_change,
+        )
+        self.menu.add.dropselect(
+            title="Pick the algorithm time limit",
+            items=[
+                ("50", 50),
+                ("100", 100),
+                ("200", 200),
+                ("300", 300),
+                ("400", 400),
+                ("500", 500),
+                ("750", 750),
+                ("1000", 1000),
+                ("2000", 2000),
+                ("3000", 3000),
+                ("4000", 4000),
+                ("5000", 5000),
+                ("6000", 6000),
+                ("7000", 7000),
+                ("8000", 8000),
+                ("9000", 9000),
+                ("10000", 10000),
+            ],
+            font_size=20,
+            default=5,
+            open_middle=True,  # Opens in the middle of the menu
+            selection_box_height=17,
+            selection_box_width=212,
+            selection_infinite=True,
+            selection_option_font_size=20,
             onchange=self.on_time_change,
         )
 
@@ -65,13 +154,24 @@ class OptionMenu:
     def on_board_size_change(self, value: tuple, board_size: str):
         selected, index = value
         print(f'Selected difficulty: "{selected}" ({board_size}) at index {index}')
-        self.display.args.size = int(board_size)
-        self.display.screen_size = BASE_SIZE + (self.display.args.size - 1) * CELL_SIZE
+        self.display.args.board = int(board_size)
+        self.display.cell_size = SCREEN_SIZE // (self.display.args.board + 1)
+        self.display.screen_size = self.display.cell_size * 2 + (self.display.args.board - 1) * self.display.cell_size
 
-    def on_time_change(self, time: str):
-        selected = time
-        print(f'Algo time limit (ms): "{selected}" ({time})')
-        self.display.args.time = selected
+    def on_time_change(self, value: tuple, time: str):
+        selected, index = value
+        print(f'Selected time: "{selected}" ({time}) at index {index}')
+        self.display.args.time = int(time)
+
+    def on_capture_win_change(self, value: tuple, number: str):
+        selected, index = value
+        print(f'Selected capture win: "{selected}" ({number}) at index {index}')
+        self.display.args.capture_win = int(number)
+
+    def on_sequence_win_change(self, value: tuple, number: str):
+        selected, index = value
+        print(f'Selected sequence win: "{selected}" ({number}) at index {index}')
+        self.display.args.sequence_win = int(number)
 
 
 class GameMenu:
@@ -91,6 +191,8 @@ class GameMenu:
             theme=pygame_menu.themes.THEME_DARK,
         )
         self.display = display
+        print("init args:")
+        print(self.display.args)
         self.player1_type = "human"
         self.player2_type = "engine"
         self.menu.add.button("Start", self.on_start)
@@ -119,7 +221,7 @@ class GameMenu:
         self.player2_type = selected[1]
 
     def on_start(self):
-        self.display.args.players = [self.player1_type, self.player2_type]
+        self.display.args.players = {1: self.player1_type, -1: self.player2_type}
         print("final args:")
         print(self.display.args)
         self.display.screen = pygame.display.set_mode(
