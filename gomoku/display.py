@@ -269,11 +269,11 @@ class Display:
         self.render_cell(move, self.player_turn)
         self.render_last_move(move)
         captures = self.board.add_move(move, self.player_turn)
-        print(f"Board before undo: {self.board}")
-        self.board.undo_last_move()
-        print(f"Board after undo: {self.board}")
-        captures = self.board.add_move(move, self.player_turn)
-        print(f"Board after move: {self.board}")
+        # print(f"Board before undo: {self.board}")
+        # self.board.undo_last_move()
+        # print(f"Board after undo: {self.board}")
+        # captures = self.board.add_move(move, self.player_turn)
+        # print(f"Board after move: {self.board}")
         self.last_move = move
         print(f"Player {self.player_turn if self.player_turn == 1 else 2} ", end="")
         print(f"placed a stone at {move}")
@@ -307,11 +307,11 @@ class Display:
                     continue
             else:
                 with cProfile.Profile() as pr:
-                    move, engine_time = engine.search_best_move(self.board)
+                    move, engine_time = engine.search_best_move(deepcopy(self.board))
                 stats = pstats.Stats(pr)
                 stats.sort_stats(pstats.SortKey.TIME)
                 if len(self.board_history) > 2:
-                    stats.dump_stats(f"gomoku_b{self.args.board}_d{self.args.depth}_t{self.args.time}_m{len(self.board_history)}.prof")
+                    stats.dump_stats(f"gomoku_b{self.args.board}_d{self.args.depth}_t{self.args.time}.prof")
                 if not move:
                     self.game_over = True
                     continue

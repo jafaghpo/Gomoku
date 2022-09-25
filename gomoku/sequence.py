@@ -5,11 +5,39 @@ from functools import cache
 from typing import ClassVar, Iterator
 import copy
 
-MAX_SCORE = int(1e15)
-BASE_SCORE = 15
+MAX_SCORE = int(1e20)
+BASE_SCORE = 10
 CAPTURE_BASE_SCORE = BASE_SCORE // 2
 BLOCK_PENALTY = BASE_SCORE // 4
 
+@dataclass
+class Threat:
+    """
+    Threat of a sequence
+    """
+    level: int
+    player: int
+    penalty: int = 0
+    capture: bool = False
+
+    max_level: ClassVar[int] = 5
+
+    def __eq__(self, other):
+        return self.level == other.level
+    
+    def __lt__(self, other):
+        return self.level < other.level
+    
+    def __radd__(self, other):
+        return other + self.score
+    
+    @property
+    def score(self):
+        if self.level == 0:
+            return 0
+        if self.level == Threat.max_level:
+            return MAX_SCORE * self.player
+        return (BASE_SCORE - self.penalty) ** self.level * self.player
 
 class Block(IntEnum):
     """
@@ -237,7 +265,7 @@ class Sequence:
         Returns the coordinates of the cells that directly impact
         the growth of the sequence, meaning the holes and the flanking cells.
         """
-        end = min(max(Sequence.sequence_win - self.length - self.nb_holes, 0), 2)
+        end = min(max(Sequence.sequence_win - self.length, 0), 2)
         head, tail = self.space_cells
         return self.filter_in_bounds(self.holes + head[:end] + tail[:end])
 

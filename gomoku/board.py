@@ -6,7 +6,7 @@ from typing import ClassVar
 from argparse import Namespace
 import copy
 
-from gomoku.sequence import BASE_SCORE, Sequence, Coord, Block
+from gomoku.sequence import BASE_SCORE, Sequence, Coord, Block, Threat
 
 
 def slice_up(board: np.ndarray, y: int, x: int, size: int) -> tuple[int]:
@@ -101,11 +101,11 @@ class Board:
     cells: np.ndarray
     seq_map: dict[Coord, set[int]]
     seq_list: dict[int, Sequence]
-    last_seq_id: int
     stones: list[Coord]
     capture: dict[int, int] | None
     last_chance: bool
     playing: int
+    last_seq_id: int
     successors: set[Coord]
     move_history: list[Coord, list[Coord]]
 
@@ -127,10 +127,10 @@ class Board:
         self.seq_list = {}
         self.stones = []
         self.successors = set()
-        self.last_seq_id = 0
         self.capture = {1: 0, -1: 0} if args.capture_win else None
         self.last_chance = False
         self.playing = 1
+        self.last_seq_id = 0
         self.move_history = []
 
         Board.cell_values = get_cell_values(args.board)
@@ -144,6 +144,8 @@ class Board:
         Sequence.board_size = args.board
         Sequence.sequence_win = args.sequence_win
         Sequence.capture_win = args.capture_win
+
+        Threat.max_level = args.sequence_win + 2
 
     def __str__(self) -> str:
         player_repr = {0: ".", 1: "X", -1: "O"}
@@ -161,7 +163,6 @@ class Board:
         s += f"Static Evaluation: {self.score} "
         s += f"(Sequences: {self.sequences_score}, Stones: {self.stones_score}, "
         s += f"Capture: {self.capture_score})\n"
-        s += f"Last sequence id: {self.last_seq_id}\n"
         s += f"Playing: {self.playing}\n"
         return s
     
@@ -187,7 +188,7 @@ class Board:
             if current > best_score:
                 best_seq = seq
                 best_score = current
-        return best_seq.cost_cells
+        return best_seq.cost_cells if best_seq else ()
 
     @property
     def capture_score(self) -> int:
@@ -226,6 +227,39 @@ class Board:
         Static evaluation of the board
         """
         return self.sequences_score + self.stones_score + self.capture_score
+
+    # @property
+    # def score(self) -> int:
+    #     """
+    #     Static evaluation of the board
+    #     """
+
+    #     seq_threat = {1: [], -1: []}
+    #     capture_threat = {1: [], -1: []}
+    #     score = 0
+    #     for seq in self.seq_list.values():
+    #         threat = self.sequence_threat_level(seq)
+    #         if Board.capture_win and threat.capture:
+    #             capture_threat[threat.player].append(threat)
+    #         seq_threat[threat.player].append(threat)
+    #     best_enemy_threat = max(seq_threat[-self.playing])
+    #     score += sum(seq_threat[1]) + sum(seq_threat[-1])
+    #     score -= best_enemy_threat.score
+    #     best_enemy_threat.level += 1
+    #     score += best_enemy_threat.score
+    #     score += sum(capture_threat[self.playing])
+    #     score += sum(capture_threat[-self.playing]) * len(capture_threat[-self.playing])
+    #     return score
+
+    
+    @property
+    def new_available_id(self) -> int:
+        """
+        Returns a new available id for a sequence
+        """
+        for id in range(100000):
+            if id not in self.seq_list:
+                return id
     
     def copy(self, coord: Coord | None = None) -> "Board":
         """
@@ -240,24 +274,13 @@ class Board:
         """
         Check if a move introduces a double free three
         """
-        if not self.free_double:
-            return False
         free_double = 0
-        for id in self.seq_map.get(pos, set()):
-            seq = self.seq_list[id]
-            if seq.player != player:
-                continue
-            if (
-                len(seq) == Board.sequence_win - 3
-                and seq.is_blocked == Block.NO
-                and pos in seq.cost_cells
-            ):
-                if seq.start < pos < seq.end:
-                    free_double += 1
-                else:
-                    p = pos - seq.dir if pos < seq.start else pos + seq.dir
-                    if p.in_range(Board.size) and self.cells[p] != -player:
-                        free_double += 1
+        self.cells[pos] = player
+        for dir in DIRECTIONS:
+            seq = self.get_sequence(pos, dir, player)
+            if len(seq) == Board.sequence_win - 2 and seq.is_blocked == Block.NO:
+                free_double += 1
+        self.cells[pos] = 0
         return free_double >= 2
     
     def is_capture_win(self) -> bool:
@@ -276,12 +299,16 @@ class Board:
             return 0
         for seq in self.seq_list.values():
             if seq.is_win:
-                if not self.capture or self.last_chance:
+                if not self.capture:
                     return seq.player if seq.player == 1 else 2
                 if self.capturable_stones_in_sequences(seq):
+                    if self.last_chance:
+                        return seq.player if seq.player == 1 else 2
                     self.last_chance = True
-                    return 0
+                    return 0 
                 return seq.player if seq.player == 1 else 2
+        if self.last_chance:
+            self.last_chance = False
         return 0 if 0 in self.cells else -1
 
     def get_valid_pos(self, y: int, x: int) -> Coord | None:
@@ -338,6 +365,7 @@ class Board:
         if seq.is_dead:
             return
         if seq.id == -1:
+            # seq.id = self.new_available_id
             seq.id = self.last_seq_id
             self.last_seq_id += 1
         for cell in seq:
@@ -382,6 +410,9 @@ class Board:
             self.add_sequence_spaces(id)
         else:
             seq.extend_hole(pos)
+        for cell in seq.cost_cells:
+            if self.cells[cell] == seq.player:
+                self.extend_sequence(cell, id)
 
     def add_block_to_sequence(
         self, pos: Coord, id: int, block: Block, to_list: bool = False
@@ -438,6 +469,7 @@ class Board:
         for d in visited.intersection(DIRECTIONS).symmetric_difference(DIRECTIONS):
             self.add_sequence(self.get_sequence(pos, d, player))
     
+    # TODO: need to fix this
     def undo_last_move(self) -> None:
         """
         Undo the last move.
@@ -455,6 +487,24 @@ class Board:
         self.successors = self.get_successors()
         self.playing *= -1
     
+    # TODO: temporary solution to remove
+    def undo(self) -> None:
+        """
+        Undo the last move.
+        """
+        self.move_history.pop()
+        self.cells = np.zeros((Board.size, Board.size), dtype=int)
+        self.stones.clear()
+        self.seq_list.clear()
+        self.seq_map.clear()
+        self.last_chance = False
+        self.capture = {1: 0, -1: 0} if Board.capture_win else None
+        self.playing = 1
+        self.successors.clear()
+        move_history = self.move_history.copy()
+        self.move_history.clear()
+        for move, _ in move_history:
+            self.add_move(move)
 
     def add_move(self, pos: Coord, player: int = 0) -> list[Coord]:
         """
@@ -657,10 +707,15 @@ class Board:
         """
         Returns the number of empty or ally cells after a sequence in a direction.
         """
-        in_range = lambda p: p.in_range(Board.size) and self.cells[p] != opponent
-        return (
-            sum(1 for _ in takewhile(in_range, pos.range(dir, Board.sequence_win))) - 1
-        )
+        # in_range = lambda p: p.in_range(Board.size) and self.cells[p] != opponent
+        # return (
+        #     sum(1 for _ in takewhile(in_range, pos.range(dir, Board.sequence_win))) - 1
+        # )
+        spaces = 0
+        while spaces < Board.sequence_win and pos.in_range(Board.size - 1) and self.cells[pos] != opponent:
+            pos += dir
+            spaces += 1
+        return spaces
 
     def get_half_sequence(self, pos: Coord, dir: Coord, player: int) -> Sequence:
         """
@@ -669,7 +724,7 @@ class Board:
         board_slice = SLICE_MAP[dir](self.cells, pos.y, pos.x, Board.sequence_win)
         shape = self.slice_to_shape(board_slice)
         seq = Sequence(player, shape, pos, dir)
-        seq.spaces = self.get_spaces(seq.end, seq.dir, -seq.player)
+        seq.spaces = self.get_spaces(seq.end + seq.dir, seq.dir, -seq.player)
         seq.is_blocked = Block.NO if seq.spaces != 0 else seq.dir.to_block()
         if seq.dir.to_block() == Block.HEAD:
             seq.start = seq.end
@@ -686,10 +741,11 @@ class Board:
         tail = self.get_half_sequence(pos, -dir, player)
         return head + tail if dir < -dir else tail + head
 
-    def capturable_stones_in_sequences(self, seq: Sequence) -> bool:
+    def capturable_stones_in_sequences(self, seq: Sequence) -> int:
         """
         Returns whether a sequence can be broken/reduced with a capture
         """
+        count = 0
         for stone in seq:
             visited = set()
             for id in self.seq_map.get(stone, set()).copy():
@@ -697,10 +753,42 @@ class Board:
                 if seq.id == id or seq.player != s.player:
                     continue
                 if s.capturable_sequence() != 0:
-                    return True
+                    count += 1
                 visited.update((s.dir, -s.dir))
             for d in visited.symmetric_difference(SLICE_MAP.keys()):
                 s = self.get_sequence(stone, d, seq.player)
                 if s.capturable_sequence() != 0:
-                    return True
-        return False
+                    count += 1
+        return count
+    
+    # TODO: handle sequence with length greater than sequence_win
+    def sequence_threat_level(self, seq: Sequence) -> Threat:
+        """
+        Returns the threat level of a sequence.
+        """
+        Threat.max_level = Board.sequence_win + 2
+        to_win = max(Board.sequence_win - len(seq), 0)
+        if seq.length >= Board.sequence_win:
+            best = max(seq.shape)
+            if best >= Board.sequence_win:
+                to_win = 0
+            else:
+                length = min(best + 1, Board.sequence_win - 1)
+                to_win = max(Board.sequence_win - length, 0)
+        if self.capture is not None:
+            if (n := abs(seq.capturable_sequence())) > 0:
+                to_win = max(Board.capture_win - self.capture[-seq.player] - n, 0)
+                level = Threat.max_level - to_win
+                return Threat(level, -seq.player, capture=True)
+            n = self.capturable_stones_in_sequences(seq)
+            if self.capture[-seq.player] + n >= Board.capture_win:
+                to_win += n
+        if to_win == 0:
+            return Threat(Threat.max_level, seq.player, penalty=seq.nb_holes)
+        to_block = 2 - (seq.is_blocked & Block.HEAD) + (seq.is_blocked & Block.TAIL)
+        if to_block == 0:
+            return Threat(0, seq.player)
+        if to_win == 1 and seq.nb_holes > 0:
+            to_block = 1
+        level = Threat.max_level - to_win + to_block
+        return Threat(level, seq.player, penalty=seq.nb_holes)
