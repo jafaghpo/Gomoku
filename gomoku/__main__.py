@@ -10,7 +10,7 @@ def parse_args(argv: list[str]) -> Namespace:
         "--time",
         type=int,
         default=500,
-        choices=range(500, 100001, 500),
+        choices=range(500, 10001, 500),
         metavar="TIME",
         help="time limit for engine move in milliseconds (default: 500)",
     )
@@ -42,7 +42,7 @@ def parse_args(argv: list[str]) -> Namespace:
     parser.add_argument(
         "-s",
         "--sequence-win",
-        choices=range(1, 10),
+        choices=range(3, 10),
         type=int,
         default=5,
         help="Number of consecutive stones to win",

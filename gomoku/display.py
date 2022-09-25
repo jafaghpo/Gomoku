@@ -10,8 +10,15 @@ from gomoku.engine import Engine
 SCREEN_SIZE = 800
 LINE_WIDTH = 2
 
+LAST_MOVE_KEY = "last_move"
+HELP_MOVE_KEY = "help_move"
 LAST_MOVE_COLOR = (220, 20, 60)
-SUGGESTED_MOVE_COLOR = (50, 205, 50)
+HELP_MOVE_COLOR = (50, 205, 50)
+INDICATOR = {
+    LAST_MOVE_KEY: {"color": LAST_MOVE_COLOR, "ratio": 6},
+    HELP_MOVE_KEY: {"color": HELP_MOVE_COLOR, "ratio": 3},
+}
+
 
 TEXT_PATH = "./assets/textures"
 
@@ -26,33 +33,9 @@ class OptionMenu:
         )
         self.display = display
         self.menu.add.dropselect(
-            title="Pick a board size",
-            items=[
-                ("3", 3),
-                ("4", 4),
-                ("5", 5),
-                ("6", 6),
-                ("7", 7),
-                ("8", 8),
-                ("9", 9),
-                ("10", 10),
-                ("11", 11),
-                ("12", 12),
-                ("13", 13),
-                ("14", 14),
-                ("15", 15),
-                ("16", 16),
-                ("17", 17),
-                ("18", 18),
-                ("19", 19),
-                ("20", 20),
-                ("21", 21),
-                ("22", 22),
-                ("23", 23),
-                ("24", 24),
-                ("25", 25),
-                ("26", 26),
-            ],
+            title="Board size",
+            dropselect_id="size",
+            items=[(str(s), s) for s in range(3, 26)],
             font_size=20,
             default=16,
             open_middle=True,  # Opens in the middle of the menu
@@ -63,31 +46,9 @@ class OptionMenu:
             onchange=self.on_board_size_change,
         )
         self.menu.add.dropselect(
-            title="Capture to win",
-            items=[
-                ("disabled", 0),
-                ("1", 1),
-                ("2", 2),
-                ("3", 3),
-                ("4", 4),
-                ("5", 5),
-                ("6", 6),
-                ("7", 7),
-                ("8", 8),
-                ("9", 9),
-                ("10", 10),
-                ("11", 11),
-                ("12", 12),
-                ("13", 13),
-                ("14", 14),
-                ("15", 15),
-                ("16", 16),
-                ("17", 17),
-                ("18", 18),
-                ("19", 19),
-                ("20", 20),
-                ("21", 21),
-            ],
+            title="Captures to win",
+            dropselect_id="capture",
+            items=[("disabled", 0)] + [(str(s), s) for s in range(1, 21)],
             font_size=20,
             default=5,
             open_middle=True,  # Opens in the middle of the menu
@@ -98,17 +59,9 @@ class OptionMenu:
             onchange=self.on_capture_win_change,
         )
         self.menu.add.dropselect(
-            title="sequence to win",
-            items=[
-                ("3", 3),
-                ("4", 4),
-                ("5", 5),
-                ("6", 6),
-                ("7", 7),
-                ("8", 8),
-                ("9", 9),
-                ("10", 10),
-            ],
+            title="Winning sequence length",
+            dropselect_id="sequence",
+            items=[(str(s), s) for s in range(3, 10)],
             font_size=20,
             default=2,
             open_middle=True,  # Opens in the middle of the menu
@@ -119,26 +72,9 @@ class OptionMenu:
             onchange=self.on_sequence_win_change,
         )
         self.menu.add.dropselect(
-            title="Pick the algorithm time limit",
-            items=[
-                ("50", 50),
-                ("100", 100),
-                ("200", 200),
-                ("300", 300),
-                ("400", 400),
-                ("500", 500),
-                ("750", 750),
-                ("1000", 1000),
-                ("2000", 2000),
-                ("3000", 3000),
-                ("4000", 4000),
-                ("5000", 5000),
-                ("6000", 6000),
-                ("7000", 7000),
-                ("8000", 8000),
-                ("9000", 9000),
-                ("10000", 10000),
-            ],
+            title="Engine time limit (ms)",
+            dropselect_id="time",
+            items=[(str(s), s) for s in range(500, 10001, 500)],
             font_size=20,
             default=5,
             open_middle=True,  # Opens in the middle of the menu
@@ -152,26 +88,52 @@ class OptionMenu:
         self.menu.add.button("Return to main menu", pygame_menu.events.RESET)
 
     def on_board_size_change(self, value: tuple, board_size: str):
-        selected, index = value
-        print(f'Selected difficulty: "{selected}" ({board_size}) at index {index}')
-        self.display.args.board = int(board_size)
-        self.display.cell_size = SCREEN_SIZE // (self.display.args.board + 1)
-        self.display.screen_size = self.display.cell_size * 2 + (self.display.args.board - 1) * self.display.cell_size
+        """
+        Function called to modify the board size from a selector in the option menu
+        """
+        self.change_board_size(int(board_size))
+        if self.display.args.board < self.display.args.sequence_win:
+            self.display.args.sequence_win = self.display.args.board
+            self.menu.get_widget("sequence").set_value(self.display.args.board - 3)
+        if self.display.args.board < 4:
+            self.display.args.capture_win = 0
+            self.menu.get_widget("capture").set_value(0)
 
     def on_time_change(self, value: tuple, time: str):
-        selected, index = value
-        print(f'Selected time: "{selected}" ({time}) at index {index}')
+        """
+        Function called to modify the time limit of the engine
+        from a selector in the option menu
+        """
         self.display.args.time = int(time)
 
     def on_capture_win_change(self, value: tuple, number: str):
-        selected, index = value
-        print(f'Selected capture win: "{selected}" ({number}) at index {index}')
-        self.display.args.capture_win = int(number)
+        """
+        Function called to modify the number of captures to win (1 capture = 2 stones)
+        from a selector in the option menu
+        """
+        if self.display.args.board >= 4:
+            self.display.args.capture_win = int(number)
 
     def on_sequence_win_change(self, value: tuple, number: str):
-        selected, index = value
-        print(f'Selected sequence win: "{selected}" ({number}) at index {index}')
+        """
+        Function called to modify the number of stones in a row to win
+        from a selector in the option menu
+        """
         self.display.args.sequence_win = int(number)
+        if self.display.args.sequence_win > self.display.args.board:
+            self.change_board_size(self.display.args.sequence_win)
+            self.menu.get_widget("size").set_value(self.display.args.board - 3)
+
+    def change_board_size(self, size: int):
+        """
+        Change the board size and the screen and cell size
+        """
+        self.display.args.board = size
+        self.display.cell_size = SCREEN_SIZE // (self.display.args.board + 1)
+        self.display.screen_size = (
+            self.display.cell_size * 2
+            + (self.display.args.board - 1) * self.display.cell_size
+        )
 
 
 class GameMenu:
@@ -191,8 +153,6 @@ class GameMenu:
             theme=pygame_menu.themes.THEME_DARK,
         )
         self.display = display
-        print("init args:")
-        print(self.display.args)
         self.player1_type = "human"
         self.player2_type = "engine"
         self.menu.add.button("Start", self.on_start)
@@ -211,25 +171,33 @@ class GameMenu:
         self.menu.add.button("Quit", self.on_quit)
 
     def on_player1_change(self, value: tuple, player: str):
+        """
+        Function called to modify the type of player 1 (human or engine)
+        """
         selected, index = value
-        print(f'Selected difficulty: "{selected}" ({player}) at index {index}')
         self.player1_type = selected[1]
 
     def on_player2_change(self, value: tuple, player: str):
+        """
+        Function called to modify the type of player 2 (human or engine)
+        """
         selected, index = value
-        print(f'Selected difficulty: "{selected}" ({player}) at index {index}')
         self.player2_type = selected[1]
 
     def on_start(self):
+        """
+        Function called when the start button is pressed to start the game
+        """
         self.display.args.players = {1: self.player1_type, -1: self.player2_type}
-        print("final args:")
-        print(self.display.args)
         self.display.screen = pygame.display.set_mode(
             (self.display.screen_size, self.display.screen_size)
         )
         self.menu.close(self.display.run())
 
     def on_quit(self):
+        """
+        Function called when the quit button is pressed to quit the game
+        """
         sys.exit(pygame.quit())
 
 
@@ -304,6 +272,7 @@ class Display:
             -1: f"{TEXT_PATH}/classic_white_stone.png",
         }
         self.board = None
+        self.engine = None
         self.board_history = []
         self.last_move = None
         self.player_turn = 1
@@ -373,14 +342,14 @@ class Display:
             y, x = index
             self.render_cell(Coord(y, x), self.board.cells[y][x])
 
-    def render_indicator(self, pos: Coord, color: tuple[int, int, int]) -> None:
+    def render_indicator(self, pos: Coord, type: str) -> None:
         """
         Render a red indicator on the current mouse position
         """
-        rect_size = self.cell_size // 6
+        rect_size = self.cell_size // INDICATOR[type]["ratio"]
         pygame.draw.rect(
             self.screen,
-            color,
+            INDICATOR[type]["color"],
             (
                 pos.x * self.cell_size + self.cell_size - rect_size // 2,
                 pos.y * self.cell_size + self.cell_size - rect_size // 2,
@@ -395,7 +364,7 @@ class Display:
         """
         if self.last_move:
             self.render_cell(self.last_move, self.board.cells[self.last_move])
-        self.render_indicator(pos, LAST_MOVE_COLOR)
+        self.render_indicator(pos, LAST_MOVE_KEY)
 
     def render_engine_time(self, time: float) -> None:
         """
@@ -497,8 +466,9 @@ class Display:
         """
         Start the game loop
         """
-        self.board = Board(self.args)
-        engine = Engine(self.args.time, self.args.depth)
+        if not self.board:
+            self.board = Board(self.args)
+            self.engine = Engine(self.args.time, self.args.depth)
         self.render_board(bg=True, grid=True, cells=True, last_move=True)
         suggestion = False
         while True:
@@ -508,14 +478,14 @@ class Display:
                 continue
             if self.args.players[self.player_turn] == "human":
                 if self.args.move_suggestion and not suggestion:
-                    suggestion, _ = engine.search_best_move(self.board)
-                    self.render_indicator(suggestion.coord, SUGGESTED_MOVE_COLOR)
+                    suggestion, _ = self.engine.search_best_move(self.board)
+                    self.render_indicator(suggestion.coord, HELP_MOVE_KEY)
                     self.update()
                     suggestion = True
                 if not pos or self.board.is_free_double(pos, self.player_turn):
                     continue
             else:
-                move, engine_time = engine.search_best_move(self.board)
+                move, engine_time = self.engine.search_best_move(self.board)
                 if not move:
                     self.game_over = True
                     continue
