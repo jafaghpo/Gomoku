@@ -1,11 +1,11 @@
-from cgi import print_arguments
-from gomoku.board import Board, Coord
+from gomoku.board import Board
+from gomoku.coord import Coord
 from time import time
 from dataclasses import dataclass, field
 import random
 
 BIG_NUM = int(1e20)
-BEST_MOVES = 10
+BEST_MOVES = 3
 
 @dataclass
 class Move:
@@ -102,7 +102,7 @@ class Engine:
         player_repr = {0: ".", 1: "X", -1: "O"}
         cells = [[player_repr[col] for col in row] for row in root.cells]
         for i, move in enumerate(moves.lst[:9]):
-            cells[move.coord.y][move.coord.x] = str(i + 1)
+            cells[move.coord[0]][move.coord[1]] = str(i + 1)
         for move in self.memory[hash(root)]:
             print(f"{move.coord} -> {move.score}")
         print("\n".join(" ".join(row) for row in cells))
@@ -177,7 +177,7 @@ class Engine:
         if depth == self.current_max_depth or state.is_game_over() or self.is_timeout():
             state.playing *= -1
             score = state.score
-            print(f"depth: {depth}, score: {score}")
+            # print(f"depth: {depth}, move: {state.move_history[-1]}, score: {score}")
             state.playing *= -1
             self.evaluated_nodes += 1
             return score
@@ -233,8 +233,8 @@ class Engine:
         """
         y, x = root.size // 2, root.size // 2
         if root.cells[y][x] == 0:
-            return Move(Coord(y, x), root.score + root.cell_values[y][x])
-        return Move(Coord(y - 1, x - 1), root.score + root.cell_values[y - 1][x - 1])
+            return Move((y, x), root.score + root.cell_values[y][x])
+        return Move((y - 1, x - 1), root.score + root.cell_values[y - 1][x - 1])
     
     def quick_move(self, root: Board) -> Move:
         """
@@ -267,7 +267,7 @@ class Engine:
             if not hash(root) in self.memory:
                 print(f"Time limit reached for depth {depth}")
                 break
-            self.debug_moves(root, self.memory[hash(root)])
+            # self.debug_moves(root, self.memory[hash(root)])
             best = self.memory[hash(root)].best
         print(f"Info: evaluated nodes={self.evaluated_nodes}, cutoffs={self.cutoff}, memory hits={self.memory_hits}")
         return best if best else self.quick_move(root), self.time_elapsed() / 1000

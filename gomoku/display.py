@@ -4,8 +4,9 @@ import numpy as np
 import sys
 import time
 from copy import deepcopy
-from gomoku.board import Board, Coord
+from gomoku.board import Board
 from gomoku.engine import Engine
+from gomoku.coord import Coord
 
 import cProfile
 import pstats
@@ -145,8 +146,8 @@ class Display:
         self.screen.blit(
             stone,
             (
-                pos.x * self.cell_size + self.cell_size * 1.05 - self.cell_size // 2,
-                pos.y * self.cell_size + self.cell_size * 1.05 - self.cell_size // 2,
+                pos[1] * self.cell_size + self.cell_size * 1.05 - self.cell_size // 2,
+                pos[0] * self.cell_size + self.cell_size * 1.05 - self.cell_size // 2,
             ),
         )
 
@@ -157,7 +158,7 @@ class Display:
         indexes = np.argwhere(self.board.cells != 0)
         for index in indexes:
             y, x = index
-            self.render_cell(Coord(y, x), self.board.cells[y][x])
+            self.render_cell((y, x), self.board.cells[y][x])
 
     def render_indicator(self, pos: Coord, color: tuple[int, int, int]) -> None:
         """
@@ -168,8 +169,8 @@ class Display:
             self.screen,
             color,
             (
-                pos.x * self.cell_size + self.cell_size - rect_size // 2,
-                pos.y * self.cell_size + self.cell_size - rect_size // 2,
+                pos[1] * self.cell_size + self.cell_size - rect_size // 2,
+                pos[0] * self.cell_size + self.cell_size - rect_size // 2,
                 rect_size,
                 rect_size,
             ),

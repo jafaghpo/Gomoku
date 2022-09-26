@@ -1,14 +1,17 @@
 from dataclasses import dataclass
 from enum import IntEnum
-from collections import namedtuple
+# from collections import namedtuple
 from functools import cache
 from typing import ClassVar, Iterator
 import copy
+import gomoku.coord as coord
 
 MAX_SCORE = int(1e20)
 BASE_SCORE = 10
-CAPTURE_BASE_SCORE = BASE_SCORE // 2
+CAPTURE_BASE_SCORE = BASE_SCORE
 BLOCK_PENALTY = BASE_SCORE // 4
+
+Coord = tuple[int, int]
 
 @dataclass
 class Threat:
@@ -49,92 +52,24 @@ class Block(IntEnum):
     TAIL = 2
     BOTH = 3
 
-
-class Coord(namedtuple("Coord", "y x")):
-    __slots__ = ()
-
-    def __new__(cls, y, x):
-        return super().__new__(cls, y, x)
-
-    def __add__(self, other) -> "Coord":
-        return Coord(self.y + other[0], self.x + other[1])
-
-    def __sub__(self, other) -> "Coord":
-        return Coord(self.y - other[0], self.x - other[1])
-
-    def __mul__(self, a):
-        return Coord(self.y * a, self.x * a)
-
-    def __rmul__(self, a):
-        return self.__mul__(a)
-
-    def __eq__(self, other) -> bool:
-        return self.y == other[0] and self.x == other[1]
-
-    def __hash__(self):
-        return hash((self.y, self.x))
-
-    def __str__(self):
-        return f"({self.y}, {self.x})"
-
-    def __repr__(self):
-        return f"Coord({self.y}, {self.x})"
-
-    def __neg__(self):
-        return Coord(-self.y, -self.x)
-
-    def distance(self, other):
+    @staticmethod
+    def tuple_to_block(t: Coord) -> "Block":
         """
-        Returns the distance between two coordinates.
+        Returns the Block enum value corresponding to the tuple.
         """
-        res = self - other
-        return max(abs(res.y), abs(res.x))
+        return Block.HEAD if t[0] == -1 or (t[0] == 0 and t[1] == -1) else Block.TAIL
 
-    def range(self, dir, len, step=1):
-        """
-        Works the same as range() but with the Coord class which is a tuple.
-        """
-        for i in range(0, len, step):
-            yield self + dir * i
-
-    def range_with_shape(self, dir, shape, step2d=1, step1d=1):
-        """
-        Takes a shape (length of subsequences separated by an empty cell) and gets
-        the range of Coords for each len in shape while skipping cells in between.
-        """
-        current = self
-        for len in shape:
-            for coord in current.range(dir, len, step1d):
-                current = coord
-                yield coord
-            current += dir * (step2d + 1)
-
-    def in_range(self, size: int) -> bool:
-        """
-        Returns True if the Coord is between a certain range.
-        """
-        return 0 <= self.y < size and 0 <= self.x < size
-
-    def to_block(self) -> Block:
-        """
-        Depending on the direction (from top to bottom or bottom to top),
-        returns the type of block
-        """
-        if self.y == -1 or (self.y == 0 and self.x == -1):
-            return Block.HEAD
-        else:
-            return Block.TAIL
 
 
 DIR_STR = {
-    Coord(0, -1): "← (left)",
-    Coord(-1, -1): "↖ (up-left)",
-    Coord(-1, 0): "↑ (up)",
-    Coord(-1, 1): "↗ (up-right)",
-    Coord(0, 1): "→ (right)",
-    Coord(1, 1): "↘ (down-right)",
-    Coord(1, 0): "↓ (down)",
-    Coord(1, -1): "↙ (down-left)",
+    (0, -1): "← (left)",
+    (-1, -1): "↖ (up-left)",
+    (-1, 0): "↑ (up)",
+    (-1, 1): "↗ (up-right)",
+    (0, 1): "→ (right)",
+    (1, 1): "↘ (down-right)",
+    (1, 0): "↓ (down)",
+    (1, -1): "↙ (down-left)",
 }
 
 
@@ -189,7 +124,7 @@ class Sequence:
         """
         Returns the coordinates of the last cell of the sequence.
         """
-        return self.start + (self.length - 1) * self.dir
+        return coord.add(self.start, coord.mul(self.dir, self.length - 1))
 
     @property
     def holes(self) -> tuple[Coord]:
@@ -201,9 +136,9 @@ class Sequence:
         holes = []
         acc = self.start
         for subseq_len in self.shape[:-1]:
-            acc += self.dir * subseq_len
+            acc = coord.add(acc, coord.mul(self.dir, subseq_len))
             holes.append(acc)
-            acc += self.dir
+            acc = coord.add(acc, self.dir)
         return tuple(holes)
 
     @property
@@ -211,14 +146,16 @@ class Sequence:
         """
         Returns the coordinates of the cells that are the head of a block.
         """
-        return (self.start - self.dir,) if self.is_blocked & Block.HEAD else ()
+        is_blocked_head = self.is_blocked & Block.HEAD
+        return (coord.sub(self.start, self.dir),) if is_blocked_head else ()
 
     @property
     def block_tail(self) -> tuple[Coord]:
         """
         Returns the coordinates of the cells that are the tail of a block.
         """
-        return (self.end + self.dir,) if self.is_blocked & Block.TAIL else ()
+        is_blocked_tail = self.is_blocked & Block.TAIL
+        return (coord.add(self.end, self.dir),) if is_blocked_tail else ()
 
     @property
     def block_cells(self) -> tuple[Coord]:
@@ -234,8 +171,8 @@ class Sequence:
         """
         max_len_head = min(self.spaces[0], max(Sequence.sequence_win - self.length, 2))
         max_len_tail = min(self.spaces[1], max(Sequence.sequence_win - self.length, 2))
-        head = tuple(self.start + (i + 1) * -self.dir for i in range(max_len_head))
-        tail = tuple(self.end + (i + 1) * self.dir for i in range(max_len_tail))
+        head = tuple(coord.add(self.start, coord.mul(coord.neg(self.dir), i + 1)) for i in range(max_len_head))
+        tail = tuple(coord.add(self.end, coord.mul(self.dir, i + 1)) for i in range(max_len_tail))
         return self.filter_in_bounds(head), self.filter_in_bounds(tail)
 
     @property
@@ -250,14 +187,15 @@ class Sequence:
         """
         Returns the coordinates of the stones in the sequence.
         """
-        return tuple(self.start.range_with_shape(self.dir, self.shape))
+        return tuple(coord.range_shape(self.start, self.dir, self.shape))
 
     @property
     def flank_cells(self) -> tuple[Coord]:
         """
         Returns the coordinates of the cells that flank the sequence.
         """
-        return self.filter_in_bounds((self.start - self.dir, self.end + self.dir))
+        head, tail = coord.sub(self.start, self.dir), coord.add(self.end, self.dir)
+        return self.filter_in_bounds((head, tail))
 
     @property
     def cost_cells(self) -> tuple[Coord]:
@@ -390,16 +328,16 @@ class Sequence:
         block_penalty = BLOCK_PENALTY * int(self.is_blocked != Block.NO)
         base = max(BASE_SCORE - self.nb_holes - block_penalty, 2)
         seq_score = Sequence.seq_score(shape, base) * self.player
-        return seq_score + capture_score
+        return seq_score + capture_score * 2
 
     def is_block(self, pos: Coord) -> Block:
         """
         Returns a Block type depending on whether the given position can block
         the sequence if an opponent stone is placed there.
         """
-        if pos == self.start - self.dir and self.spaces[0] > 0:
+        if pos == coord.sub(self.start, self.dir) and self.spaces[0] > 0:
             return Block.HEAD
-        elif pos == self.end + self.dir and self.spaces[1] > 0:
+        elif pos == coord.add(self.end, self.dir) and self.spaces[1] > 0:
             return Block.TAIL
         else:
             return Block.NO
@@ -408,26 +346,33 @@ class Sequence:
         """
         Returns cells that are not out of range.
         """
-        return tuple(filter(lambda c: c.in_range(Sequence.board_size), cells))
+        return tuple(c for c in cells if coord.in_bound(c, Sequence.board_size))
 
     def extend_tail(self, pos: Coord, space: int) -> None:
         """
         Extends the sequence by one cell.
         """
-        if self.end + self.dir == pos:
+        if self.is_blocked == Block.TAIL:
+            print(self)
+        if coord.add(self.end, self.dir) == pos:
             self.shape = self.shape[:-1] + (self.shape[-1] + 1,)
             self.spaces = (self.spaces[0], space)
         else:
             self.shape += (1,)
             self.spaces = (self.spaces[0], space)
         if self.spaces[1] == 0:
+            if self.is_blocked + Block.TAIL == 4:
+                print(self)
+                print(f"pos: {pos}, space: {space}")
             self.is_blocked = Block(self.is_blocked + Block.TAIL)
 
     def extend_head(self, pos: Coord, space: int) -> None:
         """
         Extends the sequence by one cell.
         """
-        if self.start - self.dir == pos:
+        if self.is_blocked == Block.HEAD:
+            print(self)
+        if coord.sub(self.start, self.dir) == pos:
             self.shape = (self.shape[0] + 1,) + self.shape[1:]
             self.spaces = (space, self.spaces[1])
         else:
@@ -435,6 +380,9 @@ class Sequence:
             self.spaces = (space, self.spaces[1])
         self.start = pos
         if self.spaces[0] == 0:
+            if self.is_blocked + Block.HEAD == 4:
+                print(f"pos: {pos}, space: {space}")
+                print(self)
             self.is_blocked = Block(self.is_blocked + Block.HEAD)
 
     def extend_hole(self, pos: Coord) -> None:
@@ -454,8 +402,8 @@ class Sequence:
         """
         return (
             self.start < pos < self.end
-            or pos.distance(self.start) <= 2
-            or pos.distance(self.end) <= 2
+            or coord.distance(pos, self.start) <= 2
+            or coord.distance(pos, self.end) <= 2
         )
 
     def split_at_blocked_hole(self, pos: Coord) -> tuple["Sequence", "Sequence"]:
@@ -475,7 +423,7 @@ class Sequence:
             Sequence(
                 self.player,
                 self.shape[index + 1 :],
-                pos + self.dir,
+                coord.add(pos, self.dir),
                 self.dir,
                 (0, self.spaces[1]),
                 Block((self.is_blocked & Block.TAIL) + Block.HEAD),
@@ -491,7 +439,7 @@ class Sequence:
         self.shape = (self.shape[0] - 1,) + self.shape[1:]
         if self.shape[0] == 0:
             self.shape = self.shape[1:]
-        self.spaces = (self.spaces[0] + self.start.distance(start), self.spaces[1])
+        self.spaces = (self.spaces[0] + coord.distance(self.start, start), self.spaces[1])
         if self.is_blocked == Block.HEAD or self.is_blocked == Block.BOTH:
             self.is_blocked = Block(self.is_blocked - Block.HEAD)
 
@@ -503,7 +451,7 @@ class Sequence:
         self.shape = self.shape[:-1] + (self.shape[-1] - 1,)
         if self.shape[-1] == 0:
             self.shape = self.shape[:-1]
-        self.spaces = (self.spaces[0], self.spaces[1] + self.end.distance(end))
+        self.spaces = (self.spaces[0], self.spaces[1] + coord.distance(self.end, end))
         if self.is_blocked == Block.TAIL or self.is_blocked == Block.BOTH:
             self.is_blocked = Block(self.is_blocked - Block.TAIL)
 
@@ -513,7 +461,7 @@ class Sequence:
         """
 
         def is_blocked_by_opponent(block: tuple[Coord]) -> bool:
-            return block != () and block[0].in_range(Sequence.board_size)
+            return block != () and coord.in_bound(block[0], Sequence.board_size)
 
         head = int(is_blocked_by_opponent(self.block_head) and self.shape[0] == 2)
         tail = int(is_blocked_by_opponent(self.block_tail) and self.shape[-1] == 2)
