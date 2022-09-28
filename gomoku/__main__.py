@@ -10,7 +10,7 @@ def parse_args(argv: list[str]) -> Namespace:
         "--time",
         type=int,
         default=500,
-        choices=range(500, 10001, 500),
+        choices=[100, 250, 500, 750, 1000, 2500, 5000, 7500, 10000],
         metavar="TIME",
         help="time limit for engine move in milliseconds (default: 500)",
     )
@@ -18,7 +18,7 @@ def parse_args(argv: list[str]) -> Namespace:
         "-p",
         "--players",
         nargs=2,
-        choices={"human", "engine"},
+        choices=["human", "engine"],
         default=["human", "engine"],
         help="Player type (human or engine)",
         metavar=("player1", "player2"),

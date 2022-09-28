@@ -74,9 +74,19 @@ class OptionMenu:
         self.menu.add.dropselect(
             title="Engine time limit (ms)",
             dropselect_id="time",
-            items=[(str(s), s) for s in range(500, 10001, 500)],
+            items=[
+                ("100", 100),
+                ("250", 250),
+                ("500", 500),
+                ("750", 750),
+                ("1000", 1000),
+                ("2500", 2500),
+                ("5000", 5000),
+                ("7500", 7500),
+                ("10000", 10000),
+            ],
             font_size=20,
-            default=5,
+            default=2,
             open_middle=True,  # Opens in the middle of the menu
             selection_box_height=17,
             selection_box_width=212,
@@ -166,6 +176,16 @@ class GameMenu:
             [("Engine", "engine"), ("Human", "human")],
             onchange=self.on_player2_change,
         )
+        self.menu.add.selector(
+            "Game preset",
+            [
+                ("Classic", "classic"),
+                ("Freestyle", "freestyle"),
+                ("Connect4", "connect4"),
+                ("Tic-tac-toe", "tictactoe"),
+            ],
+            onchange=self.on_gamemode_change,
+        )
         option_menu = OptionMenu(self.display)
         self.menu.add.button("Options", option_menu.menu)
         self.menu.add.button("Quit", self.on_quit)
@@ -183,6 +203,34 @@ class GameMenu:
         """
         selected, index = value
         self.player2_type = selected[1]
+
+    def on_gamemode_change(self, value: tuple, gamemode: str):
+        """
+        Function called to quickly set a game mode.
+        """
+        selected, index = value
+        gamemode = selected[1]
+        match gamemode:
+            case "connect4":
+                self.display.args.gravity = True
+                self.display.args.board = 7
+                self.display.cell_size = SCREEN_SIZE // (self.display.args.board + 1)
+                self.display.screen_size = (
+                    self.display.cell_size * 2
+                    + (self.display.args.board - 1) * self.display.cell_size
+                )
+                self.display.args.capture_win = 0
+            case "tictactoe":
+                self.display.args.board = 3
+                self.display.cell_size = SCREEN_SIZE // (self.display.args.board + 1)
+                self.display.screen_size = (
+                    self.display.cell_size * 2
+                    + (self.display.args.board - 1) * self.display.cell_size
+                )
+                self.display.args.capture_win = 0
+            case "freestyle":
+                self.display.args.capture_win = 0
+                self.display.args.free_double = False
 
     def on_start(self):
         """
@@ -262,6 +310,7 @@ class Display:
     def __init__(self, args):
         pygame.init()
         self.args = args
+        print(self.args)
         self.cell_size = SCREEN_SIZE // (self.args.board + 1)
         self.screen_size = self.cell_size * 2 + (args.board - 1) * self.cell_size
         self.background = pygame.image.load(f"{TEXT_PATH}/classic_background.png")
