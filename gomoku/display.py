@@ -95,6 +95,24 @@ class OptionMenu:
             onchange=self.on_time_change,
         )
 
+        self.menu.add.selector(
+            "Gravity",
+            [
+                ("Off", False),
+                ("On", True),
+            ],
+            onchange=self.on_gravity_change,
+        )
+
+        self.menu.add.selector(
+            "Free Double",
+            [
+                ("On", True),
+                ("Off", False),
+            ],
+            onchange=self.on_freedouble_change,
+        )
+
         self.menu.add.button("Return to main menu", pygame_menu.events.RESET)
 
     def on_board_size_change(self, value: tuple, board_size: str):
@@ -144,6 +162,20 @@ class OptionMenu:
             self.display.cell_size * 2
             + (self.display.args.board - 1) * self.display.cell_size
         )
+
+    def on_gravity_change(self, value: tuple, gravity: str):
+        """
+        Function called to modify the type of player 1 (human or engine)
+        """
+        selected, index = value
+        self.display.args.gravity = selected[1]
+
+    def on_freedouble_change(self, value: tuple, freedouble: str):
+        """
+        Function called to modify the type of player 1 (human or engine)
+        """
+        selected, index = value
+        self.display.args.free_double = selected[1]
 
 
 class GameMenu:
