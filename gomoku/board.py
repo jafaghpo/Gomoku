@@ -344,18 +344,25 @@ class Board:
         Remove the sequence spaces from sequence map.
         """
         seq = self.seq_list[id]
-        index = int(block) - 1
-        spaces = seq.space_cells[index]
-        try:
-            start = spaces.index(pos)
-        except ValueError:
-            return
-        for cell in spaces[start:]:
-            self.seq_map.get(cell, set()).discard(id)
-        if from_list:
-            seq.spaces = (
-                (start, seq.spaces[1]) if index == 0 else (seq.spaces[0], start)
-            )
+        if block != Block.BOTH:
+            index = int(block) - 1
+            spaces = seq.space_cells[index]
+            try:
+                start = spaces.index(pos)
+            except ValueError:
+                return
+            for cell in spaces[start:]:
+                self.seq_map.get(cell, set()).discard(id)
+            if from_list:
+                seq.spaces = (
+                    (start, seq.spaces[1]) if index == 0 else (seq.spaces[0], start)
+                )
+        else:
+            for cell in seq.space_cells:
+                for space in cell:
+                    self.seq_map.get(space, set()).discard(id)
+            if from_list:
+                seq.spaces = (0, 0)
 
     def add_sequence(self, seq: Sequence) -> None:
         """
@@ -376,13 +383,17 @@ class Board:
                 self.seq_map.setdefault(cell, set()).add(seq.id)
         self.seq_list[seq.id] = seq
 
-    def add_sequence_spaces(self, id: int) -> None:
+    def add_sequence_spaces(self, id: int, index: int = 2) -> None:
         """
         Add the sequence spaces to sequence map.
         """
-        for side in self.seq_list[id].space_cells:
-            for cell in side:
+        if index != 2:
+            for cell in self.seq_list[id].space_cells[index]:
                 self.seq_map.setdefault(cell, set()).add(id)
+        else:
+            for side in self.seq_list[id].space_cells:
+                for cell in side:
+                    self.seq_map.setdefault(cell, set()).add(id)
 
     def extend_sequence(self, pos: Coord, id: int) -> None:
         """
@@ -390,32 +401,34 @@ class Board:
         """
         seq = self.seq_list[id]
         if pos < seq.start:
-            self.remove_sequence_spaces(coord.add(seq.end, seq.dir), id, Block.TAIL)
-            flank = coord.sub(pos, seq.dir)
-            if not coord.in_bound(flank, Board.size) or self.cells[flank] == -seq.player:
-                self.add_block_to_sequence(flank, id, Block.HEAD)
-            else:
-                self.remove_sequence_spaces(coord.sub(pos, seq.dir), id, Block.HEAD)
-            # if seq.is_blocked & Block.HEAD:
-            #     print(self)
-            seq.extend_head(pos, self.get_spaces(pos, coord.neg(seq.dir), -seq.player))
-            self.add_sequence_spaces(id)
+            self.extend_head_sequence(pos, seq)
         elif pos > seq.end:
-            self.remove_sequence_spaces(coord.sub(seq.start, seq.dir), id, Block.HEAD)
-            flank = coord.add(pos, seq.dir)
-            if not coord.in_bound(flank, Board.size) or self.cells[flank] == -seq.player:
-                self.add_block_to_sequence(flank, id, Block.TAIL)
-            else:
-                self.remove_sequence_spaces(coord.add(pos, seq.dir), id, Block.TAIL)
-            # if seq.is_blocked & Block.TAIL:
-            #     print(self)
-            seq.extend_tail(pos, self.get_spaces(pos, seq.dir, -seq.player))
-            self.add_sequence_spaces(id)
+            self.extend_tail_sequence(pos, seq)
         else:
             seq.extend_hole(pos)
         for cell in seq.cost_cells:
             if self.cells[cell] == seq.player:
                 self.extend_sequence(cell, id)
+
+    def extend_head_sequence(self, pos: Coord, seq: Sequence) -> None:
+        """
+        Extend a sequence head with the given position.
+        """
+        self.remove_sequence_spaces(coord.sub(pos, seq.dir), seq.id, Block.HEAD)
+        seq.extend_head(pos, self.get_spaces(pos, coord.neg(seq.dir), -seq.player))
+        self.add_sequence_spaces(seq.id, index=0)
+        if seq.spaces[0] == 0:
+            self.add_block_to_sequence(coord.sub(pos, seq.dir), seq.id, Block.HEAD)
+
+    def extend_tail_sequence(self, pos: Coord, seq: Sequence) -> None:
+        """
+        Extend a sequence tail with the given position.
+        """
+        self.remove_sequence_spaces(coord.add(pos, seq.dir), seq.id, Block.TAIL)
+        seq.extend_tail(pos, self.get_spaces(pos, seq.dir, -seq.player))
+        self.add_sequence_spaces(seq.id, index=1)
+        if seq.spaces[1] == 0:
+            self.add_block_to_sequence(coord.add(pos, seq.dir), seq.id, Block.TAIL)
 
     def add_block_to_sequence(
         self, pos: Coord, id: int, block: Block, to_list: bool = False
@@ -472,7 +485,6 @@ class Board:
         for d in visited.intersection(DIRECTIONS).symmetric_difference(DIRECTIONS):
             self.add_sequence(self.get_sequence(pos, d, player))
     
-    # TODO: need to fix this
     def undo_last_move(self) -> None:
         """
         Undo the last move.
@@ -489,25 +501,6 @@ class Board:
                 self.update_sequences_at_added_stone(pos, self.playing)
         self.successors = self.get_successors()
         self.playing *= -1
-    
-    # TODO: temporary solution to remove
-    def undo(self) -> None:
-        """
-        Undo the last move.
-        """
-        self.move_history.pop()
-        self.cells = np.zeros((Board.size, Board.size), dtype=int)
-        self.stones.clear()
-        self.seq_list.clear()
-        self.seq_map.clear()
-        self.last_chance = False
-        self.capture = {1: 0, -1: 0} if Board.capture_win else None
-        self.playing = 1
-        self.successors.clear()
-        move_history = self.move_history.copy()
-        self.move_history.clear()
-        for move, _ in move_history:
-            self.add_move(move)
 
     def add_move(self, pos: Coord, player: int = 0) -> list[Coord]:
         """
@@ -710,10 +703,7 @@ class Board:
         """
         Returns the number of empty or ally cells after a sequence in a direction.
         """
-        # in_range = lambda p: p.in_range(Board.size) and self.cells[p] != opponent
-        # return (
-        #     sum(1 for _ in takewhile(in_range, pos.range(dir, Board.sequence_win))) - 1
-        # )
+        pos = coord.add(pos, dir) # skip the first stone
         spaces = 0
         while spaces < Board.sequence_win and coord.in_bound(pos, Board.size - 1) and self.cells[pos] != opponent:
             pos = coord.add(pos, dir)
@@ -727,7 +717,7 @@ class Board:
         board_slice = SLICE_MAP[dir](self.cells, pos[0], pos[1], Board.sequence_win)
         shape = self.slice_to_shape(board_slice)
         seq = Sequence(player, shape, pos, dir)
-        seq.spaces = self.get_spaces(coord.add(seq.end, seq.dir), seq.dir, -seq.player)
+        seq.spaces = self.get_spaces(seq.end, seq.dir, -seq.player)
         seq.is_blocked = Block.NO if seq.spaces != 0 else Block.tuple_to_block(seq.dir)
         if Block.tuple_to_block(seq.dir) == Block.HEAD:
             seq.start = seq.end

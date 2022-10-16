@@ -4,9 +4,9 @@ import numpy as np
 import sys
 import time
 from copy import deepcopy
-from gomoku.board import Board
+from gomoku.board import Board, Coord
 from gomoku.engine import Engine
-from gomoku.coord import Coord
+import gomoku.coord as coord
 
 import cProfile
 import pstats
@@ -270,11 +270,30 @@ class Display:
         self.render_cell(move, self.player_turn)
         self.render_last_move(move)
         captures = self.board.add_move(move, self.player_turn)
+        ###### DEBUG ######
+        flag = False
+        print(self.board)
+        for seq in self.board.seq_list.values():
+            for stone in seq:
+                if self.board.cells[stone] != seq.player:
+                    print(f"Error: invalid rest cell {stone} in sequence {seq.id}")
+                    flag = True
+            for stone in seq.block_cells:
+                if not coord.in_bound(stone, self.board.size) or self.board.cells[stone] != -seq.player :
+                    print(f"Error: invalid block cell {stone} in sequence {seq.id}")
+                    flag = True
+            for stone in seq.growth_cells:
+                if not coord.in_bound(stone, self.board.size) or self.board.cells[stone] != 0:
+                    print(f"Error: invalid growth cell {stone} in sequence {seq.id}")
+                    flag = True
+        if flag:
+            sys.exit(pygame.quit())
         # print(f"Board before undo: {self.board}")
         # self.board.undo_last_move()
         # print(f"Board after undo: {self.board}")
         # captures = self.board.add_move(move, self.player_turn)
         # print(f"Board after move: {self.board}")
+        ###### END DEBUG ######
         self.last_move = move
         print(f"Player {self.player_turn if self.player_turn == 1 else 2} ", end="")
         print(f"placed a stone at {move}")

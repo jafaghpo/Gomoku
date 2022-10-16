@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 import random
 
 BIG_NUM = int(1e20)
-BEST_MOVES = 3
+BEST_MOVES = 5
 
 @dataclass
 class Move:
@@ -69,6 +69,7 @@ class Successors:
     def sort(self) -> None:
         self.filter()
         self.lst.sort(reverse=(self.player == 1))
+        self.lst = self.lst[:BEST_MOVES]
 
 @dataclass
 class Engine:
@@ -145,7 +146,6 @@ class Engine:
             moves[i].score = score
         moves.sort()
         if moves.lst:
-            moves.lst = moves.lst[:BEST_MOVES]
             self.memory[hash(state)] = moves
         return value
     
@@ -166,7 +166,6 @@ class Engine:
             moves[i].score = score
         moves.sort()
         if moves.lst:
-            moves.lst = moves.lst[:BEST_MOVES]
             self.memory[hash(state)] = moves
         return value
     
