@@ -7,7 +7,7 @@ import copy
 
 from gomoku.sequence import BASE_SCORE, Sequence, Block, Threat
 import gomoku.coord as coord
-from gomoku.coord import Coord
+from gomoku.coord import Coord, in_bound
 
 
 def slice_up(board: np.ndarray, y: int, x: int, size: int) -> tuple[int]:
@@ -90,6 +90,18 @@ def get_cell_values(size: int) -> np.ndarray:
             ] = (min(x, y) + 1)
     return array
 
+def get_cell_neighbors(size: int) -> dict[Coord, tuple[Coord]]:
+    neighbors = {}
+    for y in range(size):
+        for x in range(size):
+            lst = []
+            for offset in NEIGHBORS_OFFSET:
+                neighbor = (y + offset[0], x + offset[1])
+                if in_bound(neighbor, size):
+                    lst.append(neighbor)
+            neighbors[(y, x)] = tuple(lst)
+    return neighbors
+
 
 @dataclass(init=False, repr=True, slots=True)
 class Board:
@@ -110,6 +122,7 @@ class Board:
 
     # Class constants shared by all instances
     cell_values: ClassVar[np.ndarray]
+    cell_neighbors = ClassVar[dict[Coord, tuple[Coord]]]
     size: ClassVar[int]
     sequence_win: ClassVar[int]
     capture_win: ClassVar[int]
@@ -133,6 +146,7 @@ class Board:
         self.move_history = []
 
         Board.cell_values = get_cell_values(args.board)
+        Board.cell_neighbors = get_cell_neighbors(args.board)
         Board.size = args.board
         Board.free_double = args.free_double
         Board.sequence_win = args.sequence_win
@@ -630,26 +644,20 @@ class Board:
                 capturable.extend([coord.add(pos, dir), coord.add(pos, coord.add(dir, dir))])
         return capturable
 
-    def get_successors_around_stone(self, pos: Coord) -> list[Coord]:
-        """
-        Returns a list of positions around the given position.
-        """
-        return [coord.add(pos, off) for off in NEIGHBORS_OFFSET if self.can_place(coord.add(pos, off))]
-
     def get_successors(self) -> set[Coord]:
         """
         Returns the coordinates of the neighbor cells of all stones in a 2-cell radius
         """
         successors = set()
         for stone in self.stones:
-            successors.update(self.get_successors_around_stone(stone))
+            successors.update(self.cell_neighbors[stone])
         return successors
 
     def update_successors(self, pos: Coord) -> None:
         """
         Update the successors of the board.
         """
-        self.successors.update(self.get_successors_around_stone(pos))
+        self.successors.update(self.cell_neighbors[pos])
         self.successors.discard(pos)
 
     @staticmethod
