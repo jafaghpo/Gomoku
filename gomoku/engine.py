@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 import random
 
 BIG_NUM = int(1e20)
-BEST_MOVES = 5
+BEST_MOVES = 1000
 
 @dataclass
 class Move:
@@ -104,9 +104,10 @@ class Engine:
         cells = [[player_repr[col] for col in row] for row in root.cells]
         for i, move in enumerate(moves.lst[:9]):
             cells[move.coord[0]][move.coord[1]] = str(i + 1)
-        for move in self.memory[hash(root)]:
+        for move in moves:
             print(f"{move.coord} -> {move.score}")
-        print("\n".join(" ".join(row) for row in cells))
+        print(" ".join([str(i % 10) for i in range(root.size)]))
+        print("\n".join(" ".join(row + [str(i)]) for i, row in enumerate(cells)))
 
     def time_elapsed(self) -> int:
         """
@@ -133,19 +134,23 @@ class Engine:
         """
         Returns the best move for the maximizing player
         """
+        print(f"In maximize, depth={depth}, alpha={alpha}, beta={beta}")
         value = -BIG_NUM
         for i in range(len(moves)):
             state.add_move(moves[i].coord)
             score = self.alpha_beta(state, depth + 1, alpha, beta)
+            print(f"value: {value}, score: {score}, coord: {moves[i].coord}, alpha: {alpha}, beta: {beta}")
             value = max(value, score)
             state.undo_last_move()
             alpha = max(alpha, value)
+            moves[i].score = score
             if value >= beta:
                 self.cutoff += 1
                 break # Beta cut-off
-            moves[i].score = score
         moves.sort()
         if moves.lst:
+            print(f"after sort:")
+            self.debug_moves(state, moves)
             self.memory[hash(state)] = moves
         return value
     
@@ -153,19 +158,23 @@ class Engine:
         """
         Returns the best move for the minimizing player
         """
+        print(f"In minimize, depth={depth}, alpha={alpha}, beta={beta}")
         value = BIG_NUM
         for i in range(len(moves)):
             state.add_move(moves[i].coord)
             score = self.alpha_beta(state, depth + 1, alpha, beta)
+            print(f"value: {value}, score: {score}, coord: {moves[i].coord}, alpha: {alpha}, beta: {beta}")
             value = min(value, score)
             state.undo_last_move() 
             beta = min(beta, value)
+            moves[i].score = score
             if value <= alpha:
                 self.cutoff += 1
                 break # Alpha cut-off
-            moves[i].score = score
         moves.sort()
         if moves.lst:
+            print(f"after sort:")
+            self.debug_moves(state, moves)
             self.memory[hash(state)] = moves
         return value
     
@@ -200,7 +209,7 @@ class Engine:
             self.evaluated_nodes += 1
             state.playing *= -1
             score = state.score
-            print(f"depth: {depth}, score: {score}")
+            # print(f"depth: {depth}, score: {score}")
             state.playing *= -1
             return score
         moves = None
@@ -221,6 +230,7 @@ class Engine:
                 break
             moves[i].score = score
         moves.sort()
+        self.debug_moves(state, moves.lst[:BEST_MOVES])
         if moves.lst:
             moves.lst = moves.lst[:BEST_MOVES]
             self.memory[hash(state)] = moves
@@ -250,6 +260,7 @@ class Engine:
         """
         Uses an iterative deepening with MTDf search algorithm to find the best move
         """
+        print(f"root board:\n{root}")
         self.start_time = time()
         self.memory_hits = self.cutoff = self.evaluated_nodes = 0
         best = None
@@ -266,7 +277,8 @@ class Engine:
             if not hash(root) in self.memory:
                 print(f"Time limit reached for depth {depth}")
                 break
-            # self.debug_moves(root, self.memory[hash(root)])
+            print(f"depth: {depth}, time: {self.time_elapsed() / 1000:.2f}s")
+            self.debug_moves(root, self.memory[hash(root)])
             best = self.memory[hash(root)].best
         print(f"Info: evaluated nodes={self.evaluated_nodes}, cutoffs={self.cutoff}, memory hits={self.memory_hits}")
         return best if best else self.quick_move(root), self.time_elapsed() / 1000

@@ -272,7 +272,12 @@ class Display:
         captures = self.board.add_move(move, self.player_turn)
         ###### DEBUG ######
         flag = False
-        print(self.board)
+        print(f"Board before undo: {self.board}")
+        print(f"Board successors: {self.board.successors}")
+        # self.board.undo_last_move()
+        # print(f"Board after undo: {self.board}")
+        # captures = self.board.add_move(move, self.player_turn)
+        # print(f"Board after move: {self.board}")
         for seq in self.board.seq_list.values():
             for stone in seq:
                 if self.board.cells[stone] != seq.player:
@@ -288,11 +293,6 @@ class Display:
                     flag = True
         if flag:
             sys.exit(pygame.quit())
-        # print(f"Board before undo: {self.board}")
-        # self.board.undo_last_move()
-        # print(f"Board after undo: {self.board}")
-        # captures = self.board.add_move(move, self.player_turn)
-        # print(f"Board after move: {self.board}")
         ###### END DEBUG ######
         self.last_move = move
         print(f"Player {self.player_turn if self.player_turn == 1 else 2} ", end="")

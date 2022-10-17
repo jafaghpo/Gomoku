@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 import numpy as np
 from functools import cache
-from typing import ClassVar
+from typing import ClassVar, Iterable
 from argparse import Namespace
 import copy
 
@@ -643,6 +643,12 @@ class Board:
             if self.capturable_slice(board_slice, cases):
                 capturable.extend([coord.add(pos, dir), coord.add(pos, coord.add(dir, dir))])
         return capturable
+    
+    def filter_successors(self, cell: Coord) -> Iterable[Coord]:
+        """
+        Filter out successors that are equivalent to the current board
+        """
+        return (c for c in self.cell_neighbors[cell] if self.can_place(c))
 
     def get_successors(self) -> set[Coord]:
         """
@@ -650,14 +656,14 @@ class Board:
         """
         successors = set()
         for stone in self.stones:
-            successors.update(self.cell_neighbors[stone])
+            successors.update(self.filter_successors(stone))
         return successors
 
     def update_successors(self, pos: Coord) -> None:
         """
         Update the successors of the board.
         """
-        self.successors.update(self.cell_neighbors[pos])
+        self.successors.update(self.filter_successors(pos))
         self.successors.discard(pos)
 
     @staticmethod
@@ -767,7 +773,6 @@ class Board:
         """
         Returns the threat level of a sequence.
         """
-        Threat.max_level = Board.sequence_win + 2
         to_win = max(Board.sequence_win - len(seq), 0)
         if seq.length >= Board.sequence_win:
             best = max(seq.shape)
