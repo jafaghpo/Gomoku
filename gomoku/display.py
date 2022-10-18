@@ -287,10 +287,6 @@ class Display:
                 if not coord.in_bound(stone, self.board.size) or self.board.cells[stone] != -seq.player :
                     print(f"Error: invalid block cell {stone} in sequence {seq.id}")
                     flag = True
-            for stone in seq.growth_cells:
-                if not coord.in_bound(stone, self.board.size) or self.board.cells[stone] != 0:
-                    print(f"Error: invalid growth cell {stone} in sequence {seq.id}")
-                    flag = True
         if flag:
             sys.exit(pygame.quit())
         ###### END DEBUG ######

@@ -4,8 +4,11 @@ from time import time
 from dataclasses import dataclass, field
 import random
 
+from copy import deepcopy
+import sys
+
 BIG_NUM = int(1e20)
-BEST_MOVES = 1000
+BEST_MOVES = 10
 
 @dataclass
 class Move:
@@ -59,6 +62,9 @@ class Successors:
     def __repr__(self):
         return f"Successors(depth={self.depth}, player={self.player}, lst={self.lst})"
     
+    def __contains__(self, coord: Coord) -> bool:
+        return coord in [move.coord for move in self.lst]
+    
     @property
     def best(self):
         return self[0]
@@ -100,14 +106,17 @@ class Engine:
         """
         Prints the successors of the root state of the board
         """
-        player_repr = {0: ".", 1: "X", -1: "O"}
+        player_repr = {0: ".", 1: "\u001b[32mX\033[00m", -1: "\u001b[36mO\033[00m"}
         cells = [[player_repr[col] for col in row] for row in root.cells]
+        y, x = root.move_history[-1][0]
+        cells[y][x] = f"\033[91m{'X' if root.cells[y][x] == 1 else 'O'}\033[00m"
         for i, move in enumerate(moves.lst[:9]):
-            cells[move.coord[0]][move.coord[1]] = str(i + 1)
-        for move in moves:
-            print(f"{move.coord} -> {move.score}")
+            cells[move.coord[0]][move.coord[1]] = f"\u001b[33m{i + 1}\033[00m"
+        # for move in moves:
+        #     print(f"{move.coord} -> {move.score}")
         print(" ".join([str(i % 10) for i in range(root.size)]))
         print("\n".join(" ".join(row + [str(i)]) for i, row in enumerate(cells)))
+        print()
 
     def time_elapsed(self) -> int:
         """
@@ -149,7 +158,7 @@ class Engine:
                 break # Beta cut-off
         moves.sort()
         if moves.lst:
-            print(f"after sort:")
+            # print(f"after sort:")
             self.debug_moves(state, moves)
             self.memory[hash(state)] = moves
         return value
@@ -173,7 +182,7 @@ class Engine:
                 break # Alpha cut-off
         moves.sort()
         if moves.lst:
-            print(f"after sort:")
+            # print(f"after sort:")
             self.debug_moves(state, moves)
             self.memory[hash(state)] = moves
         return value
@@ -260,6 +269,7 @@ class Engine:
         """
         Uses an iterative deepening with MTDf search algorithm to find the best move
         """
+        test = []
         print(f"root board:\n{root}")
         self.start_time = time()
         self.memory_hits = self.cutoff = self.evaluated_nodes = 0
@@ -277,8 +287,16 @@ class Engine:
             if not hash(root) in self.memory:
                 print(f"Time limit reached for depth {depth}")
                 break
-            print(f"depth: {depth}, time: {self.time_elapsed() / 1000:.2f}s")
+            print(f"\n\nDEPTH {depth} EVALUATION, TIME USED: {self.time_elapsed() / 1000:.2f}s")
             self.debug_moves(root, self.memory[hash(root)])
+            print("\n")
             best = self.memory[hash(root)].best
+            if depth == 1:
+                test = deepcopy(self.memory[hash(root)])
+                test.lst = test.lst[:5]
+            else:
+                if not best.coord in test:
+                    print(f"Best move {best.coord} at depth {depth} not in the best moves at depth 1 {test}")
+                    sys.exit(1)
         print(f"Info: evaluated nodes={self.evaluated_nodes}, cutoffs={self.cutoff}, memory hits={self.memory_hits}")
         return best if best else self.quick_move(root), self.time_elapsed() / 1000

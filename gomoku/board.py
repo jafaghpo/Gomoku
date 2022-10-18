@@ -420,9 +420,10 @@ class Board:
             self.extend_tail_sequence(pos, seq)
         else:
             seq.extend_hole(pos)
-        for cell in seq.cost_cells:
-            if self.cells[cell] == seq.player:
-                self.extend_sequence(cell, id)
+        for cells in seq.space_cells:
+            for cell in cells[:2]:
+                if self.cells[cell] == seq.player:
+                    self.extend_sequence(cell, id)
 
     def extend_head_sequence(self, pos: Coord, seq: Sequence) -> None:
         """
