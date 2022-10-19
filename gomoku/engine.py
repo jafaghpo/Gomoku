@@ -8,7 +8,7 @@ from copy import deepcopy
 import sys
 
 BIG_NUM = int(1e20)
-BEST_MOVES = 10
+BEST_MOVES = 7
 
 @dataclass
 class Move:
@@ -143,23 +143,24 @@ class Engine:
         """
         Returns the best move for the maximizing player
         """
-        print(f"In maximize, depth={depth}, alpha={alpha}, beta={beta}")
+        # print(f"In maximize, depth={depth}, alpha={alpha}, beta={beta}")
         value = -BIG_NUM
         for i in range(len(moves)):
             state.add_move(moves[i].coord)
             score = self.alpha_beta(state, depth + 1, alpha, beta)
-            print(f"value: {value}, score: {score}, coord: {moves[i].coord}, alpha: {alpha}, beta: {beta}")
             value = max(value, score)
             state.undo_last_move()
             alpha = max(alpha, value)
+            # print(f"value: {value}, score: {score}, coord: {moves[i].coord}, alpha: {alpha}, beta: {beta}")
             moves[i].score = score
-            if value >= beta:
-                self.cutoff += 1
-                break # Beta cut-off
+            # if value >= beta:
+            #     self.cutoff += 1
+            #     print(f"Beta cutoff")
+            #     break # Beta cut-off
         moves.sort()
         if moves.lst:
             # print(f"after sort:")
-            self.debug_moves(state, moves)
+            # self.debug_moves(state, moves)
             self.memory[hash(state)] = moves
         return value
     
@@ -167,23 +168,24 @@ class Engine:
         """
         Returns the best move for the minimizing player
         """
-        print(f"In minimize, depth={depth}, alpha={alpha}, beta={beta}")
+        # print(f"In minimize, depth={depth}, alpha={alpha}, beta={beta}")
         value = BIG_NUM
         for i in range(len(moves)):
             state.add_move(moves[i].coord)
             score = self.alpha_beta(state, depth + 1, alpha, beta)
-            print(f"value: {value}, score: {score}, coord: {moves[i].coord}, alpha: {alpha}, beta: {beta}")
             value = min(value, score)
             state.undo_last_move() 
             beta = min(beta, value)
+            # print(f"value: {value}, score: {score}, coord: {moves[i].coord}, alpha: {alpha}, beta: {beta}")
             moves[i].score = score
-            if value <= alpha:
-                self.cutoff += 1
-                break # Alpha cut-off
+            # if value <= alpha:
+            #     self.cutoff += 1
+            #     print(f"Alpha cut-off")
+            #     break # Alpha cut-off
         moves.sort()
         if moves.lst:
             # print(f"after sort:")
-            self.debug_moves(state, moves)
+            # self.debug_moves(state, moves)
             self.memory[hash(state)] = moves
         return value
     
@@ -270,7 +272,7 @@ class Engine:
         Uses an iterative deepening with MTDf search algorithm to find the best move
         """
         test = []
-        print(f"root board:\n{root}")
+        # print(f"root board:\n{root}")
         self.start_time = time()
         self.memory_hits = self.cutoff = self.evaluated_nodes = 0
         best = None
@@ -287,16 +289,16 @@ class Engine:
             if not hash(root) in self.memory:
                 print(f"Time limit reached for depth {depth}")
                 break
-            print(f"\n\nDEPTH {depth} EVALUATION, TIME USED: {self.time_elapsed() / 1000:.2f}s")
-            self.debug_moves(root, self.memory[hash(root)])
-            print("\n")
+            # print(f"\n\nDEPTH {depth} EVALUATION, TIME USED: {self.time_elapsed() / 1000:.2f}s")
+            # self.debug_moves(root, self.memory[hash(root)])
+            # print("\n")
             best = self.memory[hash(root)].best
-            if depth == 1:
-                test = deepcopy(self.memory[hash(root)])
-                test.lst = test.lst[:5]
-            else:
-                if not best.coord in test:
-                    print(f"Best move {best.coord} at depth {depth} not in the best moves at depth 1 {test}")
-                    sys.exit(1)
-        print(f"Info: evaluated nodes={self.evaluated_nodes}, cutoffs={self.cutoff}, memory hits={self.memory_hits}")
+            # if depth == 1:
+            #     test = deepcopy(self.memory[hash(root)])
+            #     test.lst = test.lst[:5]
+            # else:
+            #     if not best.coord in test:
+            #         print(f"Best move {best.coord} at depth {depth} not in the best moves at depth 1 {test}")
+            #         sys.exit(1)
+        # print(f"Info: evaluated nodes={self.evaluated_nodes}, cutoffs={self.cutoff}, memory hits={self.memory_hits}")
         return best if best else self.quick_move(root), self.time_elapsed() / 1000

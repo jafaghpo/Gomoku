@@ -389,6 +389,8 @@ class Sequence:
         """
         Extends the sequence by one, filling a hole in the sequence.
         """
+        if not pos in self.holes:
+            return
         index = self.holes.index(pos)
         self.shape = (
             self.shape[:index]
