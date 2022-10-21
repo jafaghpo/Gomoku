@@ -208,9 +208,14 @@ class Board:
         """
         Score of capture
         """
-        if self.capture is None:
-            return 0
-        return Sequence.capture_score(tuple(self.capture.items()))
+        # if self.capture is None:
+        #     return 0
+        # return Sequence.capture_score(tuple(self.capture.items()))
+        to_win_black = max(Board.capture_win - self.capture[1], 0)
+        threat_black = Threat(Board.capture_win - to_win_black, 1, capture=True)
+        to_win_white = max(Board.capture_win - self.capture[-1], 0)
+        threat_white = Threat(Board.capture_win - to_win_white, -1, capture=True)
+        return threat_black.score + threat_white.score
 
     @property
     def stones_score(self) -> int:
@@ -219,50 +224,70 @@ class Board:
         """
         return sum(self.cell_values[coord] * self.cells[coord] for coord in self.stones)
 
+    # @property
+    # def sequences_score(self) -> int:
+    #     """
+    #     Score of all sequences on the board
+    #     """
+    #     score = {1: 0, -1: 0}
+    #     best = 0
+    #     for seq in self.seq_list.values():
+    #         current = seq.score(self.capture) * seq.player
+    #         if seq.player == -self.playing and current > best:
+    #             best = current
+    #         else:
+    #             score[seq.player] += current * seq.player
+    #     return sum(score.values()) + (best * NEXT_TURN_BONUS * -self.playing)
+
     @property
     def sequences_score(self) -> int:
         """
-        Score of all sequences on the board
+        Static evaluation of the board
         """
-        score = {1: 0, -1: 0}
-        best = 0
+        print(f"playing: {self.playing}")
+        if not self.seq_list:
+            return 0
+        seq_threat = {1: [Threat(level=0)], -1: [Threat(level=0)]}
+        capture_threat = {1: [Threat(level=0)], -1: [Threat(level=0)]}
+        score = 0
         for seq in self.seq_list.values():
-            current = seq.score(self.capture) * seq.player
-            if seq.player == -self.playing and current > best:
-                best = current
-            else:
-                score[seq.player] += current * seq.player
-        return sum(score.values()) + (best * NEXT_TURN_BONUS * -self.playing)
+            threat = self.sequence_threat_level(seq)
+            if Board.capture_win and threat.capture:
+                capture_threat[threat.player].append(threat)
+        seq_threat[threat.player].append(threat)
+        best_enemy_threat = max(seq_threat[-self.playing])
+        score += sum(seq_threat[1]) + sum(seq_threat[-1])
+        score -= best_enemy_threat.score
+        best_enemy_threat.level += 1
+        score += best_enemy_threat.score
+        score += sum(capture_threat[self.playing])
+        score += sum(capture_threat[-self.playing]) * len(capture_threat[-self.playing])
+        print(f"best enemy threat: {best_enemy_threat}")
+        print(f"\nSeq threat (max threat level is {Threat.max_level}):")
+        print("player 1:")
+        for threat in seq_threat[1]:
+            print(threat)
+        print("player -1:")
+        for threat in seq_threat[-1]:
+            print(threat)
+        print("Capture threat:")
+        print("player 1:")
+        for threat in capture_threat[1]:
+            print(threat)
+        print("player -1:")
+        for threat in capture_threat[-1]:
+            print(threat)
+        return score
 
     @property
     def score(self) -> int:
         """
         Static evaluation of the board
         """
-        return self.sequences_score + self.stones_score + self.capture_score
-
-    # @property
-    # def score(self) -> int:
-    #     """
-    #     Static evaluation of the board
-    #     """
-
-    #     seq_threat = {1: [], -1: []}
-    #     capture_threat = {1: [], -1: []}
-    #     score = 0
-    #     for seq in self.seq_list.values():
-    #         threat = self.sequence_threat_level(seq)
-    #         if Board.capture_win and threat.capture:
-    #             capture_threat[threat.player].append(threat)
-    #         seq_threat[threat.player].append(threat)
-    #     best_enemy_threat = max(seq_threat[-self.playing])
-    #     score += sum(seq_threat[1]) + sum(seq_threat[-1])
-    #     score -= best_enemy_threat.score
-    #     best_enemy_threat.level += 1
-    #     score += best_enemy_threat.score
-    #     score += sum(capture_threat[self.playing])
-    #     score += sum(capture_threat[-self.playing]) * len(capture_threat[-self.playing])
-    #     return score
+        self.playing *= -1
+        score = self.sequences_score + self.stones_score + self.capture_score
+        self.playing *= -1
+        return score
 
     
     @property
@@ -769,12 +794,13 @@ class Board:
                     count += 1
         return count
     
-    # TODO: handle sequence with length greater than sequence_win
     def sequence_threat_level(self, seq: Sequence) -> Threat:
         """
         Returns the threat level of a sequence.
         """
         to_win = max(Board.sequence_win - len(seq), 0)
+        # if the sequence is greater than sequence_win because of holes
+        # TODO: handle sequence with length greater than sequence_win
         if seq.length >= Board.sequence_win:
             best = max(seq.shape)
             if best >= Board.sequence_win:
@@ -785,17 +811,17 @@ class Board:
         if self.capture is not None:
             if (n := abs(seq.capturable_sequence())) > 0:
                 to_win = max(Board.capture_win - self.capture[-seq.player] - n, 0)
-                level = Threat.max_level - to_win
+                level = Board.capture_win - to_win
                 return Threat(level, -seq.player, capture=True)
             n = self.capturable_stones_in_sequences(seq)
             if self.capture[-seq.player] + n >= Board.capture_win:
                 to_win += n
         if to_win == 0:
             return Threat(Threat.max_level, seq.player, penalty=seq.nb_holes)
-        to_block = 2 - (seq.is_blocked & Block.HEAD) + (seq.is_blocked & Block.TAIL)
+        to_block = 2 - ((seq.is_blocked & Block.HEAD) + (seq.is_blocked & Block.TAIL))
         if to_block == 0:
             return Threat(0, seq.player)
         if to_win == 1 and seq.nb_holes > 0:
             to_block = 1
-        level = Threat.max_level - to_win + to_block
+        level = Board.sequence_win - to_win + to_block
         return Threat(level, seq.player, penalty=seq.nb_holes)

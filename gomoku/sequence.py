@@ -18,8 +18,8 @@ class Threat:
     """
     Threat of a sequence
     """
-    level: int
-    player: int
+    level: int = 0
+    player: int = 0
     penalty: int = 0
     capture: bool = False
 

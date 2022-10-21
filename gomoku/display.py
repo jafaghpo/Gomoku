@@ -273,7 +273,7 @@ class Display:
         ###### DEBUG ######
         flag = False
         print(f"Board before undo: {self.board}")
-        print(f"Board successors: {self.board.successors}")
+        # print(f"Board successors: {self.board.successors}")
         # self.board.undo_last_move()
         # print(f"Board after undo: {self.board}")
         # captures = self.board.add_move(move, self.player_turn)
