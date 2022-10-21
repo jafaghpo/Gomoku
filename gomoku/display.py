@@ -454,10 +454,18 @@ class Display:
         """
         Render the time taken by the engine to compute the next move
         """
-        self.render_board(bg=True, grid=True, cells=True, update=False)
         font = pygame.font.SysFont(None, 24)
         img = font.render(f"{time:.4f}", True, (0, 0, 0))
         self.screen.blit(img, (10, 10))
+
+    def render_number_captures(self) -> None:
+        """
+        Render the number of captures for each player.
+        """
+        font = pygame.font.SysFont(None, 24)
+        p1, p2 = self.board.capture.values()
+        img = font.render(f"Captures:   {p1} : {p2}", True, (0, 0, 0))
+        self.screen.blit(img, (SCREEN_SIZE - 150, 10))
 
     def render_board(
         self,
@@ -527,7 +535,7 @@ class Display:
                 elif event.key == pygame.K_BACKSPACE:
                     self.cancel_last_moves()
 
-    def play_and_render_move(self, move: Coord) -> None:
+    def play_and_render_move(self, move: Coord, engine_time: int) -> None:
         """
         Play a move on the board
         """
@@ -542,8 +550,14 @@ class Display:
         if len(captures) > 0:
             p1, p2 = self.board.capture.values()
             print(f"Captured {len(captures)} enemy stones ({p1} to {p2})")
+            # self.render_number_capture()
             self.render_board(bg=True, grid=True, cells=True, update=False)
             self.render_last_move(move)
+        self.render_board(bg=True, grid=True, cells=True, update=False)
+        if self.args.capture_win:
+            self.render_number_captures()
+        if engine_time:
+            self.render_engine_time(engine_time)
         self.update()
 
     def run(self) -> None:
@@ -555,6 +569,7 @@ class Display:
             self.engine = Engine(self.args.time, self.args.depth)
         self.render_board(bg=True, grid=True, cells=True, last_move=True)
         suggestion = False
+        engine_time = None
         while True:
             time.sleep(0.01)  # Reduces heavily the CPU usage
             pos = self.handle_event()
@@ -574,9 +589,8 @@ class Display:
                     self.game_over = True
                     continue
                 else:
-                    self.render_engine_time(engine_time)
                     pos = move.coord
-            self.play_and_render_move(pos)
+            self.play_and_render_move(pos, engine_time)
             self.player_turn *= -1
             suggestion = False
             winner = self.board.is_game_over()
