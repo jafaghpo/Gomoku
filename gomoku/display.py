@@ -259,7 +259,10 @@ class GameMenu:
                     self.display.cell_size * 2
                     + (self.display.args.board - 1) * self.display.cell_size
                 )
+                self.display.args.sequence_win = 3
                 self.display.args.capture_win = 0
+                self.display.args.gravity = False
+
             case "freestyle":
                 self.display.args.capture_win = 0
                 self.display.args.free_double = False
