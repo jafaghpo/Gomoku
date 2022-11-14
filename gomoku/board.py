@@ -246,7 +246,8 @@ class Board:
     #     """
     #     Static evaluation of the board
     #     """
-
+    #     if not self.seq_list:
+    #         return self.stones_score + self.capture_score
     #     seq_threat = {1: [], -1: []}
     #     capture_threat = {1: [], -1: []}
     #     score = 0
@@ -255,6 +256,8 @@ class Board:
     #         if Board.capture_win and threat.capture:
     #             capture_threat[threat.player].append(threat)
     #         seq_threat[threat.player].append(threat)
+    #     if not seq_threat[-self.playing]:
+    #         seq_threat[-self.playing].append(Threat(0, -self.playing))
     #     best_enemy_threat = max(seq_threat[-self.playing])
     #     score += sum(seq_threat[1]) + sum(seq_threat[-1])
     #     score -= best_enemy_threat.score
@@ -262,7 +265,7 @@ class Board:
     #     score += best_enemy_threat.score
     #     score += sum(capture_threat[self.playing])
     #     score += sum(capture_threat[-self.playing]) * len(capture_threat[-self.playing])
-    #     return score
+    #     return score + self.stones_score + self.capture_score
 
     
     @property
@@ -287,6 +290,8 @@ class Board:
         """
         Check if a move introduces a double free three
         """
+        if not Board.free_double:
+            return False
         free_double = 0
         self.cells[pos] = player
         for dir in DIRECTIONS:
@@ -774,6 +779,7 @@ class Board:
         """
         Returns the threat level of a sequence.
         """
+
         to_win = max(Board.sequence_win - len(seq), 0)
         if seq.length >= Board.sequence_win:
             best = max(seq.shape)
