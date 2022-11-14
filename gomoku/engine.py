@@ -5,7 +5,6 @@ from dataclasses import dataclass, field
 import random
 
 from copy import deepcopy
-import sys
 
 BIG_NUM = int(1e20)
 BEST_MOVES = 7
@@ -153,10 +152,10 @@ class Engine:
             alpha = max(alpha, value)
             # print(f"value: {value}, score: {score}, coord: {moves[i].coord}, alpha: {alpha}, beta: {beta}")
             moves[i].score = score
-            # if value >= beta:
-            #     self.cutoff += 1
-            #     print(f"Beta cutoff")
-            #     break # Beta cut-off
+            if value >= beta:
+                self.cutoff += 1
+                print(f"Beta cutoff")
+                break # Beta cut-off
         moves.sort()
         if moves.lst:
             # print(f"after sort:")
@@ -178,10 +177,10 @@ class Engine:
             beta = min(beta, value)
             # print(f"value: {value}, score: {score}, coord: {moves[i].coord}, alpha: {alpha}, beta: {beta}")
             moves[i].score = score
-            # if value <= alpha:
-            #     self.cutoff += 1
-            #     print(f"Alpha cut-off")
-            #     break # Alpha cut-off
+            if value <= alpha:
+                self.cutoff += 1
+                print(f"Alpha cut-off")
+                break # Alpha cut-off
         moves.sort()
         if moves.lst:
             # print(f"after sort:")
@@ -200,8 +199,9 @@ class Engine:
             state.playing *= -1
             self.evaluated_nodes += 1
             return score
+        # print(f"depth: {depth}")
         moves = None
-        if hash(state) in self.memory:
+        if depth == 0 and hash(state) in self.memory:
             self.memory_hits += 1
             moves = self.memory[hash(state)]
         else:
@@ -210,43 +210,7 @@ class Engine:
             return self.maximize(state, moves, depth, alpha, beta)
         else:
             return self.minimize(state, moves, depth, alpha, beta)
-    
 
-    def negamax_ab_pruning(self, state: Board, depth: int, alpha: int, beta: int) -> int:
-        """
-        Negamax alpha-beta pruning algorithm
-        """
-        if depth == self.current_max_depth or state.is_game_over() or self.is_timeout():
-            self.evaluated_nodes += 1
-            state.playing *= -1
-            score = state.score
-            # print(f"depth: {depth}, score: {score}")
-            state.playing *= -1
-            return score
-        moves = None
-        if hash(state) in self.memory:
-            self.memory_hits += 1
-            moves = self.memory[hash(state)]
-        else:
-            moves = Successors(state, depth)
-        value = -BIG_NUM
-        for i in range(len(moves)):
-            state.add_move(moves[i].coord)
-            score = self.negamax_ab_pruning(state, depth + 1, -beta, -alpha)
-            value = max(value, score)
-            state.undo_last_move()
-            alpha = max(alpha, value)
-            if alpha >= beta:
-                self.cutoff += 1
-                break
-            moves[i].score = score
-        moves.sort()
-        self.debug_moves(state, moves.lst[:BEST_MOVES])
-        if moves.lst:
-            moves.lst = moves.lst[:BEST_MOVES]
-            self.memory[hash(state)] = moves
-        return value
-    
     def first_move(self, root: Board) -> Move:
         """
         Returns the first move of the game
