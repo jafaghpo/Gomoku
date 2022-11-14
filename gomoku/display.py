@@ -585,6 +585,7 @@ class Display:
             self.render_number_captures()
         if engine_time:
             self.render_engine_time(engine_time)
+        self.render_last_move(move)
         self.update()
 
     def run(self) -> None:
