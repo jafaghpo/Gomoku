@@ -6,6 +6,10 @@ import time
 from copy import deepcopy
 from gomoku.board import Board, Coord
 from gomoku.engine import Engine
+import gomoku.coord as coord
+
+import cProfile
+import pstats
 
 SCREEN_SIZE = 800
 LINE_WIDTH = 2
@@ -412,8 +416,8 @@ class Display:
         self.screen.blit(
             stone,
             (
-                pos.x * self.cell_size + self.cell_size * 1.05 - self.cell_size // 2,
-                pos.y * self.cell_size + self.cell_size * 1.05 - self.cell_size // 2,
+                pos[1] * self.cell_size + self.cell_size * 1.05 - self.cell_size // 2,
+                pos[0] * self.cell_size + self.cell_size * 1.05 - self.cell_size // 2,
             ),
         )
 
@@ -424,7 +428,7 @@ class Display:
         indexes = np.argwhere(self.board.cells != 0)
         for index in indexes:
             y, x = index
-            self.render_cell(Coord(y, x), self.board.cells[y][x])
+            self.render_cell((y, x), self.board.cells[y][x])
 
     def render_indicator(self, pos: Coord, type: str) -> None:
         """
@@ -435,8 +439,8 @@ class Display:
             self.screen,
             INDICATOR[type]["color"],
             (
-                pos.x * self.cell_size + self.cell_size - rect_size // 2,
-                pos.y * self.cell_size + self.cell_size - rect_size // 2,
+                pos[1] * self.cell_size + self.cell_size - rect_size // 2,
+                pos[0] * self.cell_size + self.cell_size - rect_size // 2,
                 rect_size,
                 rect_size,
             ),
@@ -544,6 +548,29 @@ class Display:
         self.render_cell(move, self.player_turn)
         self.render_last_move(move)
         captures = self.board.add_move(move, self.player_turn)
+        ###### DEBUG ######
+        flag = False
+        print(f"Board before undo: {self.board}")
+        print(f"Board successors: {self.board.successors}")
+        # self.board.undo_last_move()
+        # print(f"Board after undo: {self.board}")
+        # captures = self.board.add_move(move, self.player_turn)
+        # print(f"Board after move: {self.board}")
+        for seq in self.board.seq_list.values():
+            for stone in seq:
+                if self.board.cells[stone] != seq.player:
+                    print(f"Error: invalid rest cell {stone} in sequence {seq.id}")
+                    flag = True
+            for stone in seq.block_cells:
+                if (
+                    not coord.in_bound(stone, self.board.size)
+                    or self.board.cells[stone] != -seq.player
+                ):
+                    print(f"Error: invalid block cell {stone} in sequence {seq.id}")
+                    flag = True
+        if flag:
+            sys.exit(pygame.quit())
+        ###### END DEBUG ######
         self.last_move = move
         print(f"Player {self.player_turn if self.player_turn == 1 else 2} ", end="")
         print(f"placed a stone at {move}")
@@ -584,7 +611,16 @@ class Display:
                 if not pos or self.board.is_free_double(pos, self.player_turn):
                     continue
             else:
-                move, engine_time = self.engine.search_best_move(self.board)
+                with cProfile.Profile() as pr:
+                    move, engine_time = self.engine.search_best_move(
+                        deepcopy(self.board)
+                    )
+                stats = pstats.Stats(pr)
+                stats.sort_stats(pstats.SortKey.TIME)
+                if len(self.board_history) > 2:
+                    stats.dump_stats(
+                        f"gomoku_b{self.args.board}_d{self.args.depth}_t{self.args.time}.prof"
+                    )
                 if not move:
                     self.game_over = True
                     continue
