@@ -471,6 +471,17 @@ class Display:
         img = font.render(f"Captures:   {p1} : {p2}", True, (0, 0, 0))
         self.screen.blit(img, (SCREEN_SIZE - 150, 10))
 
+    def render_player_win(self, winner) -> None:
+        """
+        Render the annoncement of player winning.
+        """
+        font = pygame.font.SysFont(None, 24)
+        if winner > 0:
+            img = font.render(f"Player {winner} won the game !", True, (0, 0, 0))
+        else:
+            img = font.render(f"It's a draw !", True, (0, 0, 0))
+        self.screen.blit(img, (SCREEN_SIZE - (SCREEN_SIZE / 2 + 150), 10))
+
     def render_board(
         self,
         bg: bool = False,
@@ -634,3 +645,5 @@ class Display:
             if winner != 0:
                 self.game_over = True
                 print(f"Game over! {f'Player {winner} wins' if winner > 0 else 'Draw'}")
+                self.render_player_win(winner)
+                self.update()
