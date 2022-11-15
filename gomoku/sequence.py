@@ -10,6 +10,7 @@ MAX_SCORE = int(1e20)
 BASE_SCORE = 10
 CAPTURE_BASE_SCORE = BASE_SCORE
 BLOCK_PENALTY = BASE_SCORE // 4
+CAPTURE_BONUS = 2
 
 Coord = tuple[int, int]
 
@@ -38,9 +39,18 @@ class Threat:
     def score(self):
         if self.level == 0:
             return 0
+        bonus = CAPTURE_BONUS if self.capture else 1
         if self.level == Threat.max_level:
-            return MAX_SCORE * self.player
-        return (BASE_SCORE - self.penalty) ** self.level * self.player
+            return MAX_SCORE * self.player * bonus
+        return (BASE_SCORE - self.penalty) ** self.level * self.player * bonus
+    
+    def increase_by(self, inc: int):
+        """
+        Increase threat level by a number
+        """
+        self.level += inc
+        if self.level > Threat.max_level:
+            self.level = Threat.max_level
 
 class Block(IntEnum):
     """
