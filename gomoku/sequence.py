@@ -6,51 +6,13 @@ from typing import ClassVar, Iterator
 import copy
 import gomoku.coord as coord
 
-MAX_SCORE = int(1e20)
+MAX_SCORE = int(1e9)
 BASE_SCORE = 10
-CAPTURE_BASE_SCORE = BASE_SCORE
+CAPTURE_BASE_SCORE = BASE_SCORE + 1
 BLOCK_PENALTY = BASE_SCORE // 4
-CAPTURE_BONUS = 2
 
 Coord = tuple[int, int]
 
-@dataclass
-class Threat:
-    """
-    Threat of a sequence
-    """
-    level: int = 0
-    player: int = 0
-    penalty: int = 0
-    capture: bool = False
-
-    max_level: ClassVar[int] = 5
-
-    def __eq__(self, other):
-        return self.level == other.level
-    
-    def __lt__(self, other):
-        return self.level < other.level
-    
-    def __radd__(self, other):
-        return other + self.score
-    
-    @property
-    def score(self):
-        if self.level == 0:
-            return 0
-        bonus = CAPTURE_BONUS if self.capture else 1
-        if self.level == Threat.max_level:
-            return MAX_SCORE * self.player * bonus
-        return (BASE_SCORE - self.penalty) ** self.level * self.player * bonus
-    
-    def increase_by(self, inc: int):
-        """
-        Increase threat level by a number
-        """
-        self.level += inc
-        if self.level > Threat.max_level:
-            self.level = Threat.max_level
 
 class Block(IntEnum):
     """
@@ -230,13 +192,16 @@ class Sequence:
         Returns True if the sequence is winning.
         """
         return max(self.shape) >= Sequence.sequence_win
-
-    def __str__(self):
+    
+    def to_string(self, playing: int, capture: dict[int, int] | None = None) -> str:
+        """
+        Returns a string representation of the sequence.
+        """
         s = f"Sequence {self.id} (p{self.player if self.player == 1 else 2}):\n"
         s += f"  shape: {self.shape}\n"
         s += f"  spaces: {self.spaces}\n"
         s += f"  direction: {DIR_STR[self.dir]}\n"
-        s += f"  score: {self.score()}\n"
+        s += f"  score: {self.score(playing, capture)}\n"
         s += f"  is blocked: {self.is_blocked.name}\n"
         if self.is_blocked != Block.NO:
             s += f"  block cells: {', '.join(map(str, self.block_cells))}\n"
@@ -244,6 +209,20 @@ class Sequence:
         s += f"  cost cells: {', '.join(map(str, self.cost_cells))}\n"
         s += f"  growth cells: {', '.join(map(str, self.growth_cells))}\n"
         return s
+
+    # def __str__(self):
+    #     s = f"Sequence {self.id} (p{self.player if self.player == 1 else 2}):\n"
+    #     s += f"  shape: {self.shape}\n"
+    #     s += f"  spaces: {self.spaces}\n"
+    #     s += f"  direction: {DIR_STR[self.dir]}\n"
+    #     s += f"  score: {self.score()}\n"
+    #     s += f"  is blocked: {self.is_blocked.name}\n"
+    #     if self.is_blocked != Block.NO:
+    #         s += f"  block cells: {', '.join(map(str, self.block_cells))}\n"
+    #     s += f"  rest cells: {', '.join(map(str, self.rest_cells))}\n"
+    #     s += f"  cost cells: {', '.join(map(str, self.cost_cells))}\n"
+    #     s += f"  growth cells: {', '.join(map(str, self.growth_cells))}\n"
+    #     return s
 
     def __repr__(self):
         s = f"Sequence(player={self.player}, shape={self.shape}, start={self.start}, "
@@ -295,50 +274,57 @@ class Sequence:
 
     @staticmethod
     @cache
-    def capture_score(capture: tuple[tuple[int, int]]) -> int:
-        score = 0
-        for player, count in capture:
-            exponent = max(Sequence.sequence_win - Sequence.capture_win + count, 0)
-            if exponent >= Sequence.sequence_win:
-                return MAX_SCORE * player
-            n = CAPTURE_BASE_SCORE**exponent * player - player
-            score += BASE_SCORE * n
-        return score
+    def capture_score(capture: int) -> int:
+        if capture == 0:
+            return 0
+        exponent = max(Sequence.sequence_win - Sequence.capture_win + capture, 3)
+        if exponent >= Sequence.sequence_win:
+            return MAX_SCORE
+        # print(f"in capture_score, capture={capture}, exponent={exponent}")
+        return CAPTURE_BASE_SCORE**exponent
 
     @staticmethod
     @cache
     def seq_score(shape: tuple[int], base: int) -> int:
         if not shape:
             return 0
-        n = BASE_SCORE
+        n = 1
         for subseq in shape:
             if subseq >= Sequence.sequence_win:
                 return MAX_SCORE
             n *= base**subseq
+        # print(f"in seq_score, shape={shape}, base={base}, n={n}")
         return n
 
-    def score(self, capture: dict[int, int] | None = None) -> int:
+    def score(self, playing: int, capture: dict[int, int] | None = None) -> int:
         """
         Returns the score of the sequence.
         """
         capture_score = 0
         shape = self.shape
-        if capture and self.nb_holes == 0:
+        print(self)
+        print(self.player, playing)
+        if capture and self.player != playing and self.nb_holes == 0:
             tmp_capture = copy.copy(capture)
             n = self.capturable_sequence()
             if n != 0:
                 tmp_capture[-self.player] += abs(n)
-                capture_score = Sequence.capture_score(tuple(tmp_capture.items()))
+                capture_score = Sequence.capture_score(tmp_capture[-self.player]) * -self.player
+                # print(f"capture_score={capture_score}")
             if n == 1:
                 shape = shape[1:]
             elif n == -1:
                 shape = shape[:-1]
             elif n == 2:
                 shape = shape[1:-1]
+            # print(f"shape after capture: {shape}")
+            if not shape:
+                return capture_score
         block_penalty = BLOCK_PENALTY * int(self.is_blocked != Block.NO)
         base = max(BASE_SCORE - self.nb_holes - block_penalty, 2)
         seq_score = Sequence.seq_score(shape, base) * self.player
-        return seq_score + capture_score * 2
+        # print(f"seq_score={seq_score} for shape={shape}, base={base}")
+        return seq_score + capture_score
 
     def is_block(self, pos: Coord) -> Block:
         """

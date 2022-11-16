@@ -558,6 +558,7 @@ class Display:
         self.board_history.append((deepcopy(self.board), self.last_move))
         self.render_cell(move, self.player_turn)
         self.render_last_move(move)
+        print(f"Player turn before add move: {self.player_turn}")
         captures = self.board.add_move(move, self.player_turn)
         ###### DEBUG ######
         flag = False
@@ -627,12 +628,12 @@ class Display:
                     move, engine_time = self.engine.search_best_move(
                         deepcopy(self.board)
                     )
-                stats = pstats.Stats(pr)
-                stats.sort_stats(pstats.SortKey.TIME)
-                if len(self.board_history) > 2:
-                    stats.dump_stats(
-                        f"gomoku_b{self.args.board}_d{self.args.depth}_t{self.args.time}.prof"
-                    )
+                # stats = pstats.Stats(pr)
+                # stats.sort_stats(pstats.SortKey.TIME)
+                # if len(self.board_history) > 2:
+                #     stats.dump_stats(
+                #         f"gomoku_b{self.args.board}_d{self.args.depth}_t{self.args.time}.prof"
+                #     )
                 if not move:
                     self.game_over = True
                     continue
