@@ -233,6 +233,7 @@ class Board:
                 best = current
             else:
                 score[seq.player] += current * seq.player
+        print(f"best before bonus: {best * -self.playing}, best after bonus: {best * NEXT_TURN_BONUS * -self.playing}")
         return sum(score.values()) + (best * NEXT_TURN_BONUS * -self.playing)
 
     @property
@@ -511,6 +512,7 @@ class Board:
         else:
             self.update_successors(pos)
         self.move_history.append((pos, capturable))
+        self.playing *= -1
         if Board.debug:
             print(self)
         return capturable

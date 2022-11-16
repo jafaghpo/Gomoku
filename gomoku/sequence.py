@@ -7,7 +7,7 @@ import copy
 import gomoku.coord as coord
 
 MAX_SCORE = int(1e9)
-BASE_SCORE = 10
+BASE_SCORE = 6
 CAPTURE_BASE_SCORE = BASE_SCORE + 1
 BLOCK_PENALTY = BASE_SCORE // 4
 
