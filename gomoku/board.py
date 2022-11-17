@@ -233,7 +233,6 @@ class Board:
                 best = current
             else:
                 score[seq.player] += current * seq.player
-        print(f"best before bonus: {best * -self.playing}, best after bonus: {best * NEXT_TURN_BONUS * -self.playing}")
         return sum(score.values()) + (best * NEXT_TURN_BONUS * -self.playing)
 
     @property

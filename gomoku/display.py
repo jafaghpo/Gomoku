@@ -558,7 +558,6 @@ class Display:
         self.board_history.append((deepcopy(self.board), self.last_move))
         self.render_cell(move, self.player_turn)
         self.render_last_move(move)
-        print(f"Player turn before add move: {self.player_turn}")
         captures = self.board.add_move(move, self.player_turn)
         ###### DEBUG ######
         flag = False
@@ -575,8 +574,8 @@ class Display:
                     flag = True
             for stone in seq.block_cells:
                 if (
-                    not coord.in_bound(stone, self.board.size)
-                    or self.board.cells[stone] != -seq.player
+                    coord.in_bound(stone, self.board.size)
+                    and self.board.cells[stone] != -seq.player
                 ):
                     print(f"Error: invalid block cell {stone} in sequence {seq.id}")
                     flag = True

@@ -101,10 +101,11 @@ class Engine:
     memory_hits: int = 0
     evaluated_nodes: int = 0
 
-    def debug_moves(self, root: Board, moves: Successors) -> None:
+    def debug_moves(self, root: Board, moves: Successors, depth: int) -> None:
         """
         Prints the successors of the root state of the board
         """
+        print(f"\n\nDEPTH {depth} EVALUATION, TIME USED: {self.time_elapsed() / 1000:.2f}s")
         player_repr = {0: ".", 1: "\u001b[32mX\033[00m", -1: "\u001b[36mO\033[00m"}
         cells = [[player_repr[col] for col in row] for row in root.cells]
         y, x = root.move_history[-1][0]
@@ -115,7 +116,7 @@ class Engine:
         #     print(f"{move.coord} -> {move.score}")
         print(" ".join([str(i % 10) for i in range(root.size)]))
         print("\n".join(" ".join(row + [str(i)]) for i, row in enumerate(cells)))
-        print()
+        print("\n")
 
     def time_elapsed(self) -> int:
         """
@@ -209,6 +210,35 @@ class Engine:
         else:
             return self.minimize(state, moves, depth, alpha, beta)
 
+    def negamax_ab_pruning(self, state: Board, depth: int, alpha: int, beta: int) -> int:
+        """
+        Negamax with alpha-beta pruning
+        """
+        if depth == self.current_max_depth or state.is_game_over() or self.is_timeout():
+            score = state.score
+            self.evaluated_nodes += 1
+            return score * state.playing
+        # print(f"depth: {depth}")
+        moves = None
+        if depth == 0 and hash(state) in self.memory:
+            self.memory_hits += 1
+            moves = self.memory[hash(state)]
+        else:
+            moves = Successors(state, depth)
+        value = -BIG_NUM
+        for i in range(len(moves)):
+            state.add_move(moves[i].coord, state.playing)
+            score = -self.negamax_ab_pruning(state, depth + 1, -beta, -alpha)
+            value = max(value, score)
+            state.undo_last_move()
+            alpha = max(alpha, value)
+            # print(f"value: {value}, score: {score}, coord: {moves[i].coord}, alpha: {alpha}, beta: {beta}")
+            moves[i].score = score
+            if value >= beta:
+                self.cutoff += 1
+                print(f"Beta cutoff")
+                break
+
     def first_move(self, root: Board) -> Move:
         """
         Returns the first move of the game
@@ -234,7 +264,8 @@ class Engine:
         Uses an iterative deepening with MTDf search algorithm to find the best move
         """
         test = []
-        # print(f"root board:\n{root}")
+        print(f"time limit: {self.time_limit}")
+        print(f"root board:\n{root}")
         self.start_time = time()
         self.memory_hits = self.cutoff = self.evaluated_nodes = 0
         best = None
@@ -248,12 +279,12 @@ class Engine:
             self.clean_memory(len(root.move_history))
             self.alpha_beta(root, 0, -BIG_NUM, BIG_NUM)
             # self.negamax_ab_pruning(root, 0, -BIG_NUM, BIG_NUM)
+            print("after negamax")
             if not hash(root) in self.memory:
                 print(f"Time limit reached for depth {depth}")
                 break
-            # print(f"\n\nDEPTH {depth} EVALUATION, TIME USED: {self.time_elapsed() / 1000:.2f}s")
-            # self.debug_moves(root, self.memory[hash(root)])
-            # print("\n")
+            print("before sort")
+            self.debug_moves(root, self.memory[hash(root)], depth)
             best = self.memory[hash(root)].best
             # if depth == 1:
             #     test = deepcopy(self.memory[hash(root)])
@@ -262,5 +293,5 @@ class Engine:
             #     if not best.coord in test:
             #         print(f"Best move {best.coord} at depth {depth} not in the best moves at depth 1 {test}")
             #         sys.exit(1)
-        # print(f"Info: evaluated nodes={self.evaluated_nodes}, cutoffs={self.cutoff}, memory hits={self.memory_hits}")
+        print(f"Info: evaluated nodes={self.evaluated_nodes}, cutoffs={self.cutoff}, memory hits={self.memory_hits}")
         return best if best else self.quick_move(root), self.time_elapsed() / 1000

@@ -280,7 +280,6 @@ class Sequence:
         exponent = max(Sequence.sequence_win - Sequence.capture_win + capture, 3)
         if exponent >= Sequence.sequence_win:
             return MAX_SCORE
-        # print(f"in capture_score, capture={capture}, exponent={exponent}")
         return CAPTURE_BASE_SCORE**exponent
 
     @staticmethod
@@ -293,7 +292,6 @@ class Sequence:
             if subseq >= Sequence.sequence_win:
                 return MAX_SCORE
             n *= base**subseq
-        # print(f"in seq_score, shape={shape}, base={base}, n={n}")
         return n
 
     def score(self, playing: int, capture: dict[int, int] | None = None) -> int:
@@ -302,28 +300,23 @@ class Sequence:
         """
         capture_score = 0
         shape = self.shape
-        print(self)
-        print(self.player, playing)
         if capture and self.player != playing and self.nb_holes == 0:
             tmp_capture = copy.copy(capture)
             n = self.capturable_sequence()
             if n != 0:
                 tmp_capture[-self.player] += abs(n)
                 capture_score = Sequence.capture_score(tmp_capture[-self.player]) * -self.player
-                # print(f"capture_score={capture_score}")
             if n == 1:
                 shape = shape[1:]
             elif n == -1:
                 shape = shape[:-1]
             elif n == 2:
                 shape = shape[1:-1]
-            # print(f"shape after capture: {shape}")
             if not shape:
                 return capture_score
         block_penalty = BLOCK_PENALTY * int(self.is_blocked != Block.NO)
         base = max(BASE_SCORE - self.nb_holes - block_penalty, 2)
         seq_score = Sequence.seq_score(shape, base) * self.player
-        # print(f"seq_score={seq_score} for shape={shape}, base={base}")
         return seq_score + capture_score
 
     def is_block(self, pos: Coord) -> Block:
