@@ -311,7 +311,13 @@ class Board:
         Returns whether the given position is a valid move,
         meaning not out of bounds and not already occupied.
         """
-        return coord.in_bound(pos, Board.size) and self.cells[pos] == 0
+        if coord.in_bound(pos, Board.size) and self.cells[pos] == 0:
+            if self.gravity:
+                below = (pos[0] + 1, pos[1])
+                print(f"pos: {pos}, below: {below}")
+                return below[0] >= Board.size or self.cells[below] != 0
+            return True
+        return False
 
     def remove_sequence(self, id: int) -> None:
         """

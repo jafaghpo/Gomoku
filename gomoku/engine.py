@@ -245,8 +245,8 @@ class Engine:
         """
         y, x = root.size // 2, root.size // 2
         if root.cells[y][x] == 0:
-            return Move((y, x), root.score + root.cell_values[y][x])
-        return Move((y - 1, x - 1), root.score + root.cell_values[y - 1][x - 1])
+            return Move(root.get_valid_pos(y, x), root.score + root.cell_values[y][x])
+        return Move(root.get_valid_pos(y - 1, x - 1), root.score + root.cell_values[y - 1][x - 1])
     
     def quick_move(self, root: Board) -> Move:
         """
