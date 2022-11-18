@@ -98,6 +98,30 @@ class OptionMenu:
             selection_option_font_size=20,
             onchange=self.on_time_change,
         )
+        self.menu.add.dropselect(
+            title="Engine depth limit",
+            dropselect_id="depth",
+            items=[
+                ("1", 1),
+                ("2", 2),
+                ("3", 3),
+                ("4", 4),
+                ("5", 5),
+                ("6", 6),
+                ("7", 7),
+                ("8", 8),
+                ("9", 9),
+                ("10", 10),
+            ],
+            font_size=20,
+            default=9,
+            open_middle=True,  # Opens in the middle of the menu
+            selection_box_height=17,
+            selection_box_width=212,
+            selection_infinite=True,
+            selection_option_font_size=20,
+            onchange=self.on_depth_change,
+        )
 
         self.menu.add.selector(
             "Gravity",
@@ -137,6 +161,13 @@ class OptionMenu:
         from a selector in the option menu
         """
         self.display.args.time = int(time)
+
+    def on_depth_change(self, value: tuple, depth: str):
+        """
+        Function called to modify the depth limit of the engine
+        from a selector in the option menu
+        """
+        self.display.args.depth = int(depth)
 
     def on_capture_win_change(self, value: tuple, number: str):
         """
@@ -203,6 +234,16 @@ class GameMenu:
         self.player2_type = "engine"
         self.menu.add.button("Start", self.on_start)
         self.menu.add.selector(
+            "Difficulty",
+            [
+                ("Default", "Default"),
+                ("Easy", "Easy"),
+                ("Normal", "Normal"),
+                ("Hard", "Hard"),
+            ],
+            onchange=self.on_difficulty_change,
+        )
+        self.menu.add.selector(
             "Player 1",
             [("Human", "human"), ("Engine", "engine")],
             onchange=self.on_player1_change,
@@ -231,14 +272,14 @@ class GameMenu:
         Function called to modify the type of player 1 (human or engine)
         """
         selected, index = value
-        self.player1_type = selected[1]
+        self.display.args.players = {1: selected[1], -1: self.display.args.players[-1]}
 
     def on_player2_change(self, value: tuple, player: str):
         """
         Function called to modify the type of player 2 (human or engine)
         """
         selected, index = value
-        self.player2_type = selected[1]
+        self.display.args.players = {1: self.display.args.players[1], -1: selected[1]}
 
     def on_gamemode_change(self, value: tuple, gamemode: str):
         """
@@ -271,11 +312,35 @@ class GameMenu:
                 self.display.args.capture_win = 0
                 self.display.args.free_double = False
 
+    def on_difficulty_change(self, value: tuple, difficulty: str):
+        """
+        Function called to quickly set a game difficulty.
+        """
+        selected, index = value
+        difficulty = selected[1]
+        match difficulty:
+            case "Default":
+                self.display.args.players = {1: "human", -1: "engine"}
+                self.display.args.time = 500
+                self.display.args.depth = 10
+            case "Easy":
+                self.display.args.players = {1: "human", -1: "engine"}
+                self.display.args.time = 100
+                self.display.args.depth = 1
+            case "Normal":
+                self.display.args.players = {1: "human", -1: "engine"}
+                self.display.args.time = 750
+                self.display.args.depth = 3
+
+            case "Hard":
+                self.display.args.players = {1: "engine", -1: "human"}
+                self.display.args.time = 2000
+                self.display.args.depth = 10
+
     def on_start(self):
         """
         Function called when the start button is pressed to start the game
         """
-        self.display.args.players = {1: self.player1_type, -1: self.player2_type}
         self.display.screen = pygame.display.set_mode(
             (self.display.screen_size, self.display.screen_size)
         )
@@ -609,6 +674,7 @@ class Display:
         self.render_board(bg=True, grid=True, cells=True, last_move=True)
         suggestion = False
         engine_time = None
+        print(self.args)
         while True:
             time.sleep(0.01)  # Reduces heavily the CPU usage
             pos = self.handle_event()

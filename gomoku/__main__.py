@@ -78,7 +78,7 @@ def parse_args(argv: list[str]) -> Namespace:
         "--depth",
         type=int,
         choices=range(1, 11),
-        default=1,
+        default=10,
         help="Depth of the engine search",
     )
 
