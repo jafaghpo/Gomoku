@@ -5,7 +5,7 @@ from typing import ClassVar, Iterable
 from argparse import Namespace
 import copy
 
-from gomoku.sequence import Sequence, Block
+from gomoku.sequence import Sequence, Block, BASE_SCORE
 import gomoku.coord as coord
 from gomoku.coord import Coord, in_bound
 
@@ -79,7 +79,7 @@ DIRECTIONS = ((0, -1), (-1, -1), (-1, 0), (-1, 1))
 
 CAPTURE_MOVE_CASES = ((-1, 1, 1, -1), (1, -1, -1, 1))
 
-NEXT_TURN_BONUS = 2
+NEXT_TURN_BONUS = BASE_SCORE
 
 def get_cell_values(size: int) -> np.ndarray:
     array = np.zeros((size, size), dtype=int)

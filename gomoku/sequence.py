@@ -7,7 +7,7 @@ import copy
 import gomoku.coord as coord
 
 MAX_SCORE = int(1e9)
-BASE_SCORE = 6
+BASE_SCORE = 10
 CAPTURE_BASE_SCORE = BASE_SCORE + 1
 BLOCK_PENALTY = BASE_SCORE // 4
 
@@ -277,7 +277,7 @@ class Sequence:
     def capture_score(capture: int) -> int:
         if capture == 0:
             return 0
-        exponent = max(Sequence.sequence_win - Sequence.capture_win + capture, 3)
+        exponent = max(Sequence.sequence_win - Sequence.capture_win + capture, 2)
         if exponent >= Sequence.sequence_win:
             return MAX_SCORE
         return CAPTURE_BASE_SCORE**exponent

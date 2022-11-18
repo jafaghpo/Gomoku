@@ -155,7 +155,6 @@ class Engine:
             moves[i].score = score
             if value >= beta:
                 self.cutoff += 1
-                print(f"Beta cutoff")
                 break # Beta cut-off
         moves.sort()
         if moves.lst:
@@ -180,7 +179,6 @@ class Engine:
             moves[i].score = score
             if value <= alpha:
                 self.cutoff += 1
-                print(f"Alpha cut-off")
                 break # Alpha cut-off
         moves.sort()
         if moves.lst:
@@ -194,7 +192,6 @@ class Engine:
         Alpha-beta pruning algorithm
         """
         if depth == self.current_max_depth or state.is_game_over() or self.is_timeout():
-            print(f"playing: {state.playing}, last move: {state.cells[state.move_history[-1][0]]}({state.move_history[-1][0]})")
             score = state.score
             # print(f"depth: {depth}, move: {state.move_history[-1]}, score: {score}")
             self.evaluated_nodes += 1
@@ -211,34 +208,33 @@ class Engine:
         else:
             return self.minimize(state, moves, depth, alpha, beta)
 
-    def negamax_ab_pruning(self, state: Board, depth: int, alpha: int, beta: int) -> int:
-        """
-        Negamax with alpha-beta pruning
-        """
-        if depth == self.current_max_depth or state.is_game_over() or self.is_timeout():
-            score = state.score
-            self.evaluated_nodes += 1
-            return score * state.playing
-        # print(f"depth: {depth}")
-        moves = None
-        if depth == 0 and hash(state) in self.memory:
-            self.memory_hits += 1
-            moves = self.memory[hash(state)]
-        else:
-            moves = Successors(state, depth)
-        value = -BIG_NUM
-        for i in range(len(moves)):
-            state.add_move(moves[i].coord)
-            score = -self.negamax_ab_pruning(state, depth + 1, -beta, -alpha)
-            value = max(value, score)
-            state.undo_last_move()
-            alpha = max(alpha, value)
-            # print(f"value: {value}, score: {score}, coord: {moves[i].coord}, alpha: {alpha}, beta: {beta}")
-            moves[i].score = score
-            if value >= beta:
-                self.cutoff += 1
-                print(f"Beta cutoff")
-                break
+    # def negamax_ab_pruning(self, state: Board, depth: int, alpha: int, beta: int) -> int:
+    #     """
+    #     Negamax with alpha-beta pruning
+    #     """
+    #     if depth == self.current_max_depth or state.is_game_over() or self.is_timeout():
+    #         score = state.score
+    #         self.evaluated_nodes += 1
+    #         return score * state.playing
+    #     # print(f"depth: {depth}")
+    #     moves = None
+    #     if depth == 0 and hash(state) in self.memory:
+    #         self.memory_hits += 1
+    #         moves = self.memory[hash(state)]
+    #     else:
+    #         moves = Successors(state, depth)
+    #     value = -BIG_NUM
+    #     for i in range(len(moves)):
+    #         state.add_move(moves[i].coord)
+    #         score = -self.negamax_ab_pruning(state, depth + 1, -beta, -alpha)
+    #         value = max(value, score)
+    #         state.undo_last_move()
+    #         alpha = max(alpha, value)
+    #         # print(f"value: {value}, score: {score}, coord: {moves[i].coord}, alpha: {alpha}, beta: {beta}")
+    #         moves[i].score = score
+    #         if value >= beta:
+    #             self.cutoff += 1
+    #             break
 
     def first_move(self, root: Board) -> Move:
         """
