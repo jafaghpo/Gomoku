@@ -229,11 +229,11 @@ class Board:
         best = 0
         for seq in self.seq_list.values():
             current = seq.score(self.playing, self.capture) * seq.player
-            if seq.player == -self.playing and current > best:
+            if seq.player == self.playing and current > best:
                 best = current
             else:
                 score[seq.player] += current * seq.player
-        return sum(score.values()) + (best * NEXT_TURN_BONUS * -self.playing)
+        return sum(score.values()) + (best * NEXT_TURN_BONUS * self.playing)
 
     @property
     def score(self) -> int:
@@ -494,30 +494,29 @@ class Board:
         self.successors = self.get_successors()
         self.playing *= -1
 
-    def add_move(self, pos: Coord, player: int) -> list[Coord]:
+    def add_move(self, pos: Coord) -> list[Coord]:
         """
         Adds a move to the board by placing the player's stone id at the given position
         and updating the sequences around the new stone.
         """
-        self.playing = player
         capturable = []
-        self.cells[pos] = player
+        self.cells[pos] = self.playing
         self.stones.append(pos)
         if self.capture:
             capturable = self.capturable_stones(pos, CAPTURE_MOVE_CASES)
             for stone in capturable:
                 self.cells[stone] = 0
                 self.stones.remove(stone)
-            self.capture[player] += len(capturable) // 2
+            self.capture[self.playing] += len(capturable) // 2
             for stone in capturable:
                 self.update_sequences_at_removed_stone(stone)
-        self.update_sequences_at_added_stone(pos, player)
+        self.update_sequences_at_added_stone(pos, self.playing)
         if len(capturable) > 0:
             self.successors = self.get_successors()
         else:
             self.update_successors(pos)
         self.move_history.append((pos, capturable))
-        self.playing *= -1
+        self.playing = -self.cells[pos]
         if Board.debug:
             print(self)
         return capturable

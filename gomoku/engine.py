@@ -146,7 +146,7 @@ class Engine:
         # print(f"In maximize, depth={depth}, alpha={alpha}, beta={beta}")
         value = -BIG_NUM
         for i in range(len(moves)):
-            state.add_move(moves[i].coord, state.playing)
+            state.add_move(moves[i].coord)
             score = self.alpha_beta(state, depth + 1, alpha, beta)
             value = max(value, score)
             state.undo_last_move()
@@ -171,7 +171,7 @@ class Engine:
         # print(f"In minimize, depth={depth}, alpha={alpha}, beta={beta}")
         value = BIG_NUM
         for i in range(len(moves)):
-            state.add_move(moves[i].coord, state.playing)
+            state.add_move(moves[i].coord)
             score = self.alpha_beta(state, depth + 1, alpha, beta)
             value = min(value, score)
             state.undo_last_move() 
@@ -194,6 +194,7 @@ class Engine:
         Alpha-beta pruning algorithm
         """
         if depth == self.current_max_depth or state.is_game_over() or self.is_timeout():
+            print(f"playing: {state.playing}, last move: {state.cells[state.move_history[-1][0]]}({state.move_history[-1][0]})")
             score = state.score
             # print(f"depth: {depth}, move: {state.move_history[-1]}, score: {score}")
             self.evaluated_nodes += 1
@@ -227,7 +228,7 @@ class Engine:
             moves = Successors(state, depth)
         value = -BIG_NUM
         for i in range(len(moves)):
-            state.add_move(moves[i].coord, state.playing)
+            state.add_move(moves[i].coord)
             score = -self.negamax_ab_pruning(state, depth + 1, -beta, -alpha)
             value = max(value, score)
             state.undo_last_move()

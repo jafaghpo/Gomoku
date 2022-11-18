@@ -558,14 +558,14 @@ class Display:
         self.board_history.append((deepcopy(self.board), self.last_move))
         self.render_cell(move, self.player_turn)
         self.render_last_move(move)
-        captures = self.board.add_move(move, self.player_turn)
+        captures = self.board.add_move(move)
         ###### DEBUG ######
         flag = False
         # print(f"Board before undo: {self.board}")
         # print(f"Board successors: {self.board.successors}")
         # self.board.undo_last_move()
         # print(f"Board after undo: {self.board}")
-        # captures = self.board.add_move(move, self.player_turn)
+        # captures = self.board.add_move(move)
         # print(f"Board after move: {self.board}")
         for seq in self.board.seq_list.values():
             for stone in seq:

@@ -304,8 +304,8 @@ class Sequence:
             tmp_capture = copy.copy(capture)
             n = self.capturable_sequence()
             if n != 0:
-                tmp_capture[-self.player] += abs(n)
-                capture_score = Sequence.capture_score(tmp_capture[-self.player]) * -self.player
+                tmp_capture[playing] += abs(n)
+                capture_score = Sequence.capture_score(tmp_capture[playing]) * playing
             if n == 1:
                 shape = shape[1:]
             elif n == -1:
