@@ -619,7 +619,7 @@ class Display:
         """
         Play a move on the board
         """
-        print(f"Move {max(len(self.board_history) // 2, 0)}: ", end="")
+        print(f"Turn {max(len(self.board_history) // 2 + 1, 0)}: ", end="")
         self.board_history.append((deepcopy(self.board), self.last_move))
         self.render_cell(move, self.player_turn)
         self.render_last_move(move)
@@ -648,14 +648,16 @@ class Display:
             sys.exit(pygame.quit())
         ###### END DEBUG ######
         self.last_move = move
-        print(f"Player {self.player_turn if self.player_turn == 1 else 2} ", end="")
-        print(f"placed a stone at {move}")
+        print(f"{'Black' if self.player_turn == 1 else 'White'} ", end="")
+        print(f"placed a stone at {move}", end="")
         if len(captures) > 0:
             p1, p2 = self.board.capture.values()
-            print(f"Captured {len(captures)} enemy stones ({p1} to {p2})")
-            # self.render_number_capture()
+            print(f" and captured {len(captures)} enemy stones")
+            print(f"Captures count => Black: {p1} | White: {p2}")
             self.render_board(bg=True, grid=True, cells=True, update=False)
             self.render_last_move(move)
+        else:
+            print()
         self.render_board(bg=True, grid=True, cells=True, update=False)
         if self.args.capture_win:
             self.render_number_captures()
