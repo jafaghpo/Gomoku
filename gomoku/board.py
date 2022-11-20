@@ -1,9 +1,9 @@
 from dataclasses import dataclass
+from enum import IntEnum
 import numpy as np
 from functools import cache
 from typing import ClassVar, Iterable
 from argparse import Namespace
-import copy
 
 from gomoku.sequence import Sequence, Block, BASE_SCORE
 import gomoku.coord as coord
@@ -81,6 +81,15 @@ CAPTURE_MOVE_CASES = ((-1, 1, 1, -1), (1, -1, -1, 1))
 
 NEXT_TURN_BONUS = BASE_SCORE
 
+class GameOver(IntEnum):
+    NONE = 0
+    DRAW = 1
+    BLACK_SEQUENCE_WIN = 2
+    BLACK_CAPTURE_WIN = 3
+    WHITE_SEQUENCE_WIN = 4
+    WHITE_CAPTURE_WIN = 5
+
+
 def get_cell_values(size: int) -> np.ndarray:
     array = np.zeros((size, size), dtype=int)
     for y in range(size // 2 + 1):
@@ -157,6 +166,7 @@ class Board:
         Sequence.board_size = args.board
         Sequence.sequence_win = args.sequence_win
         Sequence.capture_win = args.capture_win
+        Sequence.capture_weight = 1
 
     def __str__(self) -> str:
         player_repr = {0: ".", 1: "X", -1: "O"}
@@ -189,6 +199,18 @@ class Board:
     def __hash__(self) -> int:
         return hash(self.cells.tobytes() + str(self.capture).encode() + str(self.playing).encode())
     
+    def reset(self) -> None:
+        self.cells = np.zeros((Board.size, Board.size), dtype=int)
+        self.seq_map = {}
+        self.seq_list = {}
+        self.stones = []
+        self.successors = set()
+        self.capture = {1: 0, -1: 0} if Board.capture_win else None
+        self.last_chance = False
+        self.playing = 1
+        self.last_seq_id = 0
+        self.move_history = []
+    
     @property
     def best_sequence_cost_cells(self) -> tuple[Coord]:
         best_seq, best_score = None, -1e20
@@ -208,10 +230,9 @@ class Board:
         """
         if self.capture is None:
             return 0
-        black_score = Sequence.capture_score(self.capture[1])
-        white_score = Sequence.capture_score(self.capture[-1]) * -1
-        # print(f"black capture score: {black_score * 2}, white capture score: {white_score * 2}")
-        return black_score * 2 + white_score * 2
+        black_score = Sequence.capture_score(self.capture[1]) * 2
+        white_score = Sequence.capture_score(self.capture[-1]) * -1 * 2
+        return black_score + white_score
 
     @property
     def stones_score(self) -> int:
@@ -278,22 +299,29 @@ class Board:
         Check if the game is over.
         """
         if self.is_capture_win():
-            return 1 if self.capture[1] >= Board.capture_win else 2
+            if self.capture[1] >= Board.capture_win:
+                return GameOver.BLACK_CAPTURE_WIN
+            else:
+                return GameOver.WHITE_CAPTURE_WIN
         if len(self.stones) // 2 + 1 < Board.sequence_win:
-            return 0
+            return GameOver.NONE
         for seq in self.seq_list.values():
             if seq.is_win:
-                if not self.capture:
-                    return seq.player if seq.player == 1 else 2
-                if self.capturable_stones_in_sequences(seq):
+                if self.capture and self.capturable_stones_in_sequences(seq):
                     if self.last_chance:
-                        return seq.player if seq.player == 1 else 2
+                        if seq.player == 1:
+                            return GameOver.BLACK_SEQUENCE_WIN
+                        else:
+                            return GameOver.WHITE_SEQUENCE_WIN
                     self.last_chance = True
-                    return 0 
-                return seq.player if seq.player == 1 else 2
+                    return GameOver.NONE
+                if seq.player == 1:
+                        return GameOver.BLACK_SEQUENCE_WIN
+                else:
+                    return GameOver.WHITE_SEQUENCE_WIN
         if self.last_chance:
             self.last_chance = False
-        return 0 if 0 in self.cells else -1
+        return GameOver.NONE if 0 in self.cells else GameOver.DRAW
 
     def get_valid_pos(self, y: int, x: int) -> Coord | None:
         """
@@ -314,7 +342,6 @@ class Board:
         if coord.in_bound(pos, Board.size) and self.cells[pos] == 0:
             if self.gravity:
                 below = (pos[0] + 1, pos[1])
-                print(f"pos: {pos}, below: {below}")
                 return below[0] >= Board.size or self.cells[below] != 0
             return True
         return False
@@ -362,7 +389,6 @@ class Board:
         if seq.is_dead:
             return
         if seq.id == -1:
-            # seq.id = self.new_available_id
             seq.id = self.last_seq_id
             self.last_seq_id += 1
         for cell in seq:
@@ -504,7 +530,6 @@ class Board:
         self.stones.append(pos)
         if self.capture:
             capturable = self.capturable_stones(pos, CAPTURE_MOVE_CASES)
-            print(f"in add_move, capturable is {capturable}")
             for stone in capturable:
                 self.cells[stone] = 0
                 self.stones.remove(stone)

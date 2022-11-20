@@ -4,7 +4,7 @@ import numpy as np
 import sys
 import time
 from copy import deepcopy
-from gomoku.board import Board, Coord
+from gomoku.board import Board, Coord, GameOver, Sequence
 from gomoku.engine import Engine
 import gomoku.coord as coord
 
@@ -378,6 +378,7 @@ class PauseMenu:
         )
 
         self.menu.add.button("Resume", self.on_resume)
+        self.menu.add.button("Restart", self.on_restart)
         self.menu.add.selector(
             "Move suggestion",
             [("Off", 0), ("On", 1)],
@@ -403,6 +404,17 @@ class PauseMenu:
         """
         Resume the game when the resume button is pressed
         """
+        self.menu.close(self.display.run())
+    
+    def on_restart(self):
+        """
+        Restart the game when the restart button is pressed
+        """
+        self.display.board.reset()
+        self.display.board_history = []
+        self.display.last_move = None
+        self.display.player_turn = 1
+        self.display.game_over = False
         self.menu.close(self.display.run())
 
 
@@ -536,16 +548,13 @@ class Display:
         img = font.render(f"Captures:   {p1} : {p2}", True, (0, 0, 0))
         self.screen.blit(img, (SCREEN_SIZE - 150, 10))
 
-    def render_player_win(self, winner) -> None:
+    def render_player_win(self, msg: str) -> None:
         """
         Render the annoncement of player winning.
         """
         font = pygame.font.SysFont(None, 24)
-        if winner > 0:
-            img = font.render(f"Player {winner} won the game !", True, (0, 0, 0))
-        else:
-            img = font.render(f"It's a draw !", True, (0, 0, 0))
-        self.screen.blit(img, (SCREEN_SIZE - (SCREEN_SIZE / 2 + 150), 10))
+        img = font.render(msg, True, (0, 0, 0))
+        self.screen.blit(img, (SCREEN_SIZE - (SCREEN_SIZE / 2 + 100 + len(msg)), 10))
 
     def render_board(
         self,
@@ -665,6 +674,34 @@ class Display:
             self.render_engine_time(engine_time)
         self.render_last_move(move)
         self.update()
+    
+    def game_over_to_string(self, game_over: GameOver) -> str:
+        """
+        Return the game over message
+        """
+        match game_over:
+            case GameOver.DRAW:
+                return "The game is a draw"
+            case GameOver.BLACK_SEQUENCE_WIN:
+                return "Black won by forming a winning sequence"
+            case GameOver.WHITE_SEQUENCE_WIN:
+                return "White won by forming a winning sequence"
+            case GameOver.BLACK_CAPTURE_WIN:
+                return "Black won by capture count"
+            case GameOver.WHITE_CAPTURE_WIN:
+                return "White won by capture count"
+    
+    def modify_capture_weight(self, status: GameOver) -> None:
+        """
+        Modify the capture weight if the game is over
+        """
+        match status:
+            case GameOver.BLACK_SEQUENCE_WIN | GameOver.WHITE_SEQUENCE_WIN:
+                Sequence.capture_weight *= 0.9
+            case GameOver.BLACK_CAPTURE_WIN | GameOver.WHITE_CAPTURE_WIN:
+                Sequence.capture_weight *= 1.1
+            case _:
+                pass
 
     def run(self) -> None:
         """
@@ -709,9 +746,10 @@ class Display:
             self.play_and_render_move(pos, engine_time)
             self.player_turn *= -1
             suggestion = False
-            winner = self.board.is_game_over()
-            if winner != 0:
+            status = self.board.is_game_over()
+            if status != GameOver.NONE:
                 self.game_over = True
-                print(f"Game over! {f'Player {winner} wins' if winner > 0 else 'Draw'}")
-                self.render_player_win(winner)
+                self.modify_capture_weight(status)
+                game_over_msg = self.game_over_to_string(status)
+                self.render_player_win(game_over_msg)
                 self.update()

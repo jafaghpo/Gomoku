@@ -69,6 +69,7 @@ class Sequence:
     board_size: ClassVar[int] = 19
     sequence_win: ClassVar[int] = 5
     capture_win: ClassVar[int] = 5
+    capture_weight: ClassVar[int] = 1
 
     @property
     def nb_holes(self) -> int:
@@ -306,6 +307,7 @@ class Sequence:
             if n != 0:
                 tmp_capture[playing] += abs(n)
                 capture_score = Sequence.capture_score(tmp_capture[playing]) * playing
+                capture_score *= Sequence.capture_weight
             if n == 1:
                 shape = shape[1:]
             elif n == -1:
