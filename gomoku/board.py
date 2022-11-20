@@ -262,7 +262,7 @@ class Board:
         self.cells[pos] = player
         for dir in DIRECTIONS:
             seq = self.get_sequence(pos, dir, player)
-            if len(seq) == Board.sequence_win - 2 and seq.is_blocked == Block.NO:
+            if len(seq) == min(Board.sequence_win - 2, 3) and seq.is_blocked == Block.NO and seq.nb_holes <= 1:
                 free_double += 1
         self.cells[pos] = 0
         return free_double >= 2
@@ -504,6 +504,7 @@ class Board:
         self.stones.append(pos)
         if self.capture:
             capturable = self.capturable_stones(pos, CAPTURE_MOVE_CASES)
+            print(f"in add_move, capturable is {capturable}")
             for stone in capturable:
                 self.cells[stone] = 0
                 self.stones.remove(stone)
@@ -613,9 +614,7 @@ class Board:
         """
         capturable = []
         for dir in SLICE_MAP.keys():
-            board_slice = SLICE_MAP[dir](
-                self.cells, pos[0], pos[1], Board.sequence_win - 1
-            )
+            board_slice = SLICE_MAP[dir](self.cells, pos[0], pos[1], 4)
             if self.capturable_slice(board_slice, cases):
                 capturable.extend([coord.add(pos, dir), coord.add(pos, coord.add(dir, dir))])
         return capturable
@@ -695,7 +694,7 @@ class Board:
         """
         pos = coord.add(pos, dir) # skip the first stone
         spaces = 0
-        while spaces < Board.sequence_win and coord.in_bound(pos, Board.size - 1) and self.cells[pos] != opponent:
+        while spaces < Board.sequence_win and coord.in_bound(pos, Board.size) and self.cells[pos] != opponent:
             pos = coord.add(pos, dir)
             spaces += 1
         return spaces
