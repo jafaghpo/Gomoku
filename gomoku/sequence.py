@@ -34,14 +34,14 @@ class Block(IntEnum):
 
 
 DIR_STR = {
-    (0, -1): "← (left)",
-    (-1, -1): "↖ (up-left)",
-    (-1, 0): "↑ (up)",
-    (-1, 1): "↗ (up-right)",
-    (0, 1): "→ (right)",
-    (1, 1): "↘ (down-right)",
-    (1, 0): "↓ (down)",
-    (1, -1): "↙ (down-left)",
+    (0, -1): "←",
+    (-1, -1): "↖",
+    (-1, 0): "↑",
+    (-1, 1): "↗",
+    (0, 1): "→",
+    (1, 1): "↘",
+    (1, 0): "↓",
+    (1, -1): "↙",
 }
 
 
@@ -198,32 +198,14 @@ class Sequence:
         """
         Returns a string representation of the sequence.
         """
-        s = f"Sequence {self.id} (p{self.player if self.player == 1 else 2}):\n"
-        s += f"  shape: {self.shape}\n"
-        s += f"  spaces: {self.spaces}\n"
-        s += f"  direction: {DIR_STR[self.dir]}\n"
-        s += f"  score: {self.score(playing, capture)}\n"
-        s += f"  is blocked: {self.is_blocked.name}\n"
-        if self.is_blocked != Block.NO:
-            s += f"  block cells: {', '.join(map(str, self.block_cells))}\n"
-        s += f"  rest cells: {', '.join(map(str, self.rest_cells))}\n"
-        s += f"  cost cells: {', '.join(map(str, self.cost_cells))}\n"
-        s += f"  growth cells: {', '.join(map(str, self.growth_cells))}\n"
+        s = f"[{self.id}]\t"
+        s += f"\u001b[{'32' if self.player == 1 else '36'}m"
+        s += f"Player {1 if self.player == 1 else 2}\t"
+        s += f"start: {self.rest_cells[0]}\tdir: {DIR_STR[self.dir]}\t"
+        s += f"block: {self.is_blocked.name.lower()}\t"
+        s += f"score: {self.score(playing, capture)}\tshape: {self.shape}"
+        s += f"\u001b[0m"
         return s
-
-    # def __str__(self):
-    #     s = f"Sequence {self.id} (p{self.player if self.player == 1 else 2}):\n"
-    #     s += f"  shape: {self.shape}\n"
-    #     s += f"  spaces: {self.spaces}\n"
-    #     s += f"  direction: {DIR_STR[self.dir]}\n"
-    #     s += f"  score: {self.score()}\n"
-    #     s += f"  is blocked: {self.is_blocked.name}\n"
-    #     if self.is_blocked != Block.NO:
-    #         s += f"  block cells: {', '.join(map(str, self.block_cells))}\n"
-    #     s += f"  rest cells: {', '.join(map(str, self.rest_cells))}\n"
-    #     s += f"  cost cells: {', '.join(map(str, self.cost_cells))}\n"
-    #     s += f"  growth cells: {', '.join(map(str, self.growth_cells))}\n"
-    #     return s
 
     def __repr__(self):
         s = f"Sequence(player={self.player}, shape={self.shape}, start={self.start}, "
@@ -461,3 +443,18 @@ class Sequence:
         if self.nb_holes != 0 and head + tail == 2:
             return 2
         return head - tail
+
+    def is_threat(self) -> bool:
+        """
+        Returns the threat level of the sequence.
+        """
+        if self.is_dead:
+            return False
+        if self.length > Sequence.sequence_win and len(self) >= Sequence.sequence_win - 1:
+            return True
+        if len(self) >= Sequence.sequence_win - 1:
+            return True
+        if len(self) >= Sequence.sequence_win - 2 and self.is_blocked == Block.NO:
+            return True
+        return False
+                

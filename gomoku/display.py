@@ -667,6 +667,8 @@ class Display:
             self.render_last_move(move)
         else:
             print()
+        if Board.debug:
+            print(self.board)
         self.render_board(bg=True, grid=True, cells=True, update=False)
         if self.args.capture_win:
             self.render_number_captures()
@@ -709,7 +711,7 @@ class Display:
         """
         if not self.board:
             self.board = Board(self.args)
-            self.engine = Engine(self.args.time, self.args.depth)
+            self.engine = Engine(self.args.time, self.args.depth, self.args.debug)
         self.render_board(bg=True, grid=True, cells=True, last_move=True)
         suggestion = False
         engine_time = None

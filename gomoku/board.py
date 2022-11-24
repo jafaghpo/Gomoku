@@ -56,7 +56,7 @@ SLICE_MAP = {
     (1, 1): slice_down_right,
 }
 
-NEIGHBORS_OFFSET = (
+NEIGHBORS = (
         (-2, -2),
         (-2, 0),
         (-2, 2),
@@ -73,6 +73,17 @@ NEIGHBORS_OFFSET = (
         (2, -2),
         (2, 0),
         (2, 2),
+)
+
+CLOSE_NEIGHBORS = (
+        (-1, -1),
+        (-1, 0),
+        (-1, 1),
+        (0, -1),
+        (0, 1),
+        (1, -1),
+        (1, 0),
+        (1, 1),
 )
 
 DIRECTIONS = ((0, -1), (-1, -1), (-1, 0), (-1, 1))
@@ -99,12 +110,12 @@ def get_cell_values(size: int) -> np.ndarray:
             ] = (min(x, y) + 1)
     return array
 
-def get_cell_neighbors(size: int) -> dict[Coord, tuple[Coord]]:
+def get_cell_neighbors(size: int, offsets: tuple[Coord]) -> dict[Coord, tuple[Coord]]:
     neighbors = {}
     for y in range(size):
         for x in range(size):
             lst = []
-            for offset in NEIGHBORS_OFFSET:
+            for offset in offsets:
                 neighbor = (y + offset[0], x + offset[1])
                 if in_bound(neighbor, size):
                     lst.append(neighbor)
@@ -132,6 +143,7 @@ class Board:
     # Class constants shared by all instances
     cell_values: ClassVar[np.ndarray]
     cell_neighbors = ClassVar[dict[Coord, tuple[Coord]]]
+    cell_close_neighbors = ClassVar[dict[Coord, tuple[Coord]]]
     size: ClassVar[int]
     sequence_win: ClassVar[int]
     capture_win: ClassVar[int]
@@ -155,7 +167,8 @@ class Board:
         self.move_history = []
 
         Board.cell_values = get_cell_values(args.board)
-        Board.cell_neighbors = get_cell_neighbors(args.board)
+        Board.cell_neighbors = get_cell_neighbors(args.board, NEIGHBORS)
+        Board.cell_close_neighbors = get_cell_neighbors(args.board, CLOSE_NEIGHBORS)
         Board.size = args.board
         Board.free_double = args.free_double
         Board.sequence_win = args.sequence_win
@@ -169,19 +182,19 @@ class Board:
         Sequence.capture_weight = 1
 
     def __str__(self) -> str:
-        player_repr = {0: ".", 1: "X", -1: "O"}
-        s = "Cells:\n"
-        s += "\n".join(
-            " ".join(map(lambda cell: player_repr[cell], row)) for row in self.cells
-        )
-        s += "\nStones: " + " ".join(str(stone) for stone in self.stones) + "\n"
+        player_repr = {0: ".", 1: "\u001b[32mX\033[00m", -1: "\u001b[36mO\033[00m"}
+        cells = [[player_repr[col] for col in row] for row in self.cells]
+        y, x = self.move_history[-1][0]
+        cells[y][x] = f"\033[91m{'X' if self.cells[y][x] == 1 else 'O'}\033[00m"
+        for y, x in self.get_successors():
+            cells[y][x] = f"\033[33m*\033[00m"
+        s = "\nBoard:\n"
+        s += " ".join([str(i % 10) for i in range(self.size)]) + "\n"
+        s += "\n".join(" ".join(row + [str(i)]) for i, row in enumerate(cells))
+        s += "\nSequence list:\n"
         for seq in self.seq_list.values():
-            s += seq.to_string(self.playing, self.capture) + "\n"
-        s += "Sequence map:\n"
-        for cell, seq_ids in self.seq_map.items():
-            if seq_ids:
-                s += f"{cell}: {seq_ids}\n"
-        s += f"Static Evaluation: {self.score} "
+            s += f"  {seq.to_string(self.playing, self.capture)}\n"
+        s += f"Evaluation: {self.score} "
         s += f"(Sequences: {self.sequences_score}, Stones: {self.stones_score}, "
         s += f"Capture: {self.capture_score})\n"
         s += f"Playing: {self.playing}\n"
@@ -520,7 +533,7 @@ class Board:
         self.successors = self.get_successors()
         self.playing *= -1
 
-    def add_move(self, pos: Coord) -> list[Coord]:
+    def add_move(self, pos: Coord, in_engine: bool = False) -> list[Coord]:
         """
         Adds a move to the board by placing the player's stone id at the given position
         and updating the sequences around the new stone.
@@ -537,14 +550,9 @@ class Board:
             for stone in capturable:
                 self.update_sequences_at_removed_stone(stone)
         self.update_sequences_at_added_stone(pos, self.playing)
-        if len(capturable) > 0:
-            self.successors = self.get_successors()
-        else:
-            self.update_successors(pos)
-        self.move_history.append((pos, capturable))
         self.playing = -self.cells[pos]
-        if Board.debug:
-            print(self)
+        self.successors = self.get_successors()
+        self.move_history.append((pos, capturable))
         return capturable
 
     def reduce_sequence_head(self, id: int) -> None:
@@ -643,28 +651,63 @@ class Board:
             if self.capturable_slice(board_slice, cases):
                 capturable.extend([coord.add(pos, dir), coord.add(pos, coord.add(dir, dir))])
         return capturable
+
+    def get_threats(self, player: int) -> list[Sequence]:
+        """
+        Returns a list of sequences that are threats that can result in a win
+        """
+        threats = []
+        for seq in self.seq_list:
+            if seq.player == player and seq.spaces[0] == 1 and seq.spaces[1] == 0:
+                threats.append(seq)
+        return threats
     
-    def filter_successors(self, cell: Coord) -> Iterable[Coord]:
+    def filter_successors(self, cell: Coord, close: bool = False) -> Iterable[Coord]:
         """
         Filter out successors that are equivalent to the current board
         """
-        return (c for c in self.cell_neighbors[cell] if self.can_place(c))
-
+        neighbors = self.cell_close_neighbors if close else self.cell_neighbors
+        return (c for c in neighbors[cell] if self.can_place(c))
+    
+    def get_threats(self) -> list[Sequence]:
+        """
+        Returns a list of sequences that are threats that can result in a win
+        """
+        threats = []
+        for seq in self.seq_list.values():
+            if seq.is_threat():
+                threats.append(seq)
+        return threats
+    
     def get_successors(self) -> set[Coord]:
         """
-        Returns the coordinates of the neighbor cells of all stones in a 2-cell radius
+        Returns the coordinates of the neighbor cells that are useful for the heuristic
         """
         successors = set()
-        for stone in self.stones:
-            successors.update(self.filter_successors(stone))
-        return successors
 
-    def update_successors(self, pos: Coord) -> None:
-        """
-        Update the successors of the board.
-        """
-        self.successors.update(self.filter_successors(pos))
-        self.successors.discard(pos)
+        if not any(self.cells[c] == self.playing for c in self.stones):
+            for stone in self.stones:
+                successors.update(self.filter_successors(stone, close=True))
+            return successors
+        threats = self.get_threats()
+        if threats:
+            for seq in threats:
+                successors.update(seq.cost_cells)
+            return successors
+        for stone in self.stones:
+            neighbors = self.filter_successors(stone)
+            for cell in neighbors:
+                if cell in self.seq_map:
+                    successors.add(cell)
+                else:
+                    self.cells[cell] = self.playing
+                    for d in DIRECTIONS:
+                        seq = self.get_sequence(cell, d, self.cells[cell])
+                        if not seq.is_dead:
+                            successors.add(cell)
+                            break
+                    self.cells[cell] = 0
+        return successors
 
     @staticmethod
     @cache

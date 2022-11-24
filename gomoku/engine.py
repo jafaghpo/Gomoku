@@ -7,7 +7,7 @@ import random
 from copy import deepcopy
 
 BIG_NUM = int(1e20)
-BEST_MOVES = 7
+BEST_MOVES = 10
 
 @dataclass
 class Move:
@@ -42,7 +42,7 @@ class Successors:
 
     def __init__(self, state: Board, depth: int) -> None:
         lst = []
-        for pos in state.successors:
+        for pos in state.get_successors():
             if not state.is_free_double(pos, state.playing):
                 lst.append(Move(pos))
         self.lst = lst
@@ -94,6 +94,7 @@ class Engine:
     """
     time_limit: int
     max_depth: int
+    debug: bool
     memory: dict[int, Successors] = field(default_factory=dict)
     start_time: float = 0
     current_max_depth: int = 0
@@ -105,7 +106,7 @@ class Engine:
         """
         Prints the successors of the root state of the board
         """
-        print(f"\n\nDEPTH {depth} EVALUATION, TIME USED: {self.time_elapsed() / 1000:.2f}s")
+        print(f"Depth {depth} completed, time used: {self.time_elapsed() / 1000:.2f}s")
         player_repr = {0: ".", 1: "\u001b[32mX\033[00m", -1: "\u001b[36mO\033[00m"}
         cells = [[player_repr[col] for col in row] for row in root.cells]
         y, x = root.move_history[-1][0]
@@ -116,7 +117,6 @@ class Engine:
         #     print(f"{move.coord} -> {move.score}")
         print(" ".join([str(i % 10) for i in range(root.size)]))
         print("\n".join(" ".join(row + [str(i)]) for i, row in enumerate(cells)))
-        print("\n")
 
     def time_elapsed(self) -> int:
         """
@@ -143,7 +143,6 @@ class Engine:
         """
         Returns the best move for the maximizing player
         """
-        # print(f"In maximize, depth={depth}, alpha={alpha}, beta={beta}")
         value = -BIG_NUM
         for i in range(len(moves)):
             state.add_move(moves[i].coord)
@@ -151,15 +150,12 @@ class Engine:
             value = max(value, score)
             state.undo_last_move()
             alpha = max(alpha, value)
-            # print(f"value: {value}, score: {score}, coord: {moves[i].coord}, alpha: {alpha}, beta: {beta}")
             moves[i].score = score
             if value >= beta:
                 self.cutoff += 1
                 break # Beta cut-off
         moves.sort()
         if moves.lst:
-            # print(f"after sort:")
-            # self.debug_moves(state, moves)
             self.memory[hash(state)] = moves
         return value
     
@@ -167,7 +163,6 @@ class Engine:
         """
         Returns the best move for the minimizing player
         """
-        # print(f"In minimize, depth={depth}, alpha={alpha}, beta={beta}")
         value = BIG_NUM
         for i in range(len(moves)):
             state.add_move(moves[i].coord)
@@ -175,15 +170,12 @@ class Engine:
             value = min(value, score)
             state.undo_last_move() 
             beta = min(beta, value)
-            # print(f"value: {value}, score: {score}, coord: {moves[i].coord}, alpha: {alpha}, beta: {beta}")
             moves[i].score = score
             if value <= alpha:
                 self.cutoff += 1
                 break # Alpha cut-off
         moves.sort()
         if moves.lst:
-            # print(f"after sort:")
-            # self.debug_moves(state, moves)
             self.memory[hash(state)] = moves
         return value
     
@@ -193,10 +185,8 @@ class Engine:
         """
         if depth == self.current_max_depth or state.is_game_over() or self.is_timeout():
             score = state.score
-            # print(f"depth: {depth}, move: {state.move_history[-1]}, score: {score}")
             self.evaluated_nodes += 1
             return score
-        # print(f"depth: {depth}")
         moves = None
         if depth == 0 and hash(state) in self.memory:
             self.memory_hits += 1
@@ -208,33 +198,31 @@ class Engine:
         else:
             return self.minimize(state, moves, depth, alpha, beta)
 
-    # def negamax_ab_pruning(self, state: Board, depth: int, alpha: int, beta: int) -> int:
-    #     """
-    #     Negamax with alpha-beta pruning
-    #     """
-    #     if depth == self.current_max_depth or state.is_game_over() or self.is_timeout():
-    #         score = state.score
-    #         self.evaluated_nodes += 1
-    #         return score * state.playing
-    #     # print(f"depth: {depth}")
-    #     moves = None
-    #     if depth == 0 and hash(state) in self.memory:
-    #         self.memory_hits += 1
-    #         moves = self.memory[hash(state)]
-    #     else:
-    #         moves = Successors(state, depth)
-    #     value = -BIG_NUM
-    #     for i in range(len(moves)):
-    #         state.add_move(moves[i].coord)
-    #         score = -self.negamax_ab_pruning(state, depth + 1, -beta, -alpha)
-    #         value = max(value, score)
-    #         state.undo_last_move()
-    #         alpha = max(alpha, value)
-    #         # print(f"value: {value}, score: {score}, coord: {moves[i].coord}, alpha: {alpha}, beta: {beta}")
-    #         moves[i].score = score
-    #         if value >= beta:
-    #             self.cutoff += 1
-    #             break
+    def negamax_ab_pruning(self, state: Board, depth: int, alpha: int, beta: int) -> int:
+        """
+        Negamax with alpha-beta pruning
+        """
+        if depth == self.current_max_depth or state.is_game_over() or self.is_timeout():
+            score = state.score
+            self.evaluated_nodes += 1
+            return score * state.playing
+        moves = None
+        if depth == 0 and hash(state) in self.memory:
+            self.memory_hits += 1
+            moves = self.memory[hash(state)]
+        else:
+            moves = Successors(state, depth)
+        value = -BIG_NUM
+        for i in range(len(moves)):
+            state.add_move(moves[i].coord)
+            score = -self.negamax_ab_pruning(state, depth + 1, -beta, -alpha)
+            value = max(value, score)
+            state.undo_last_move()
+            alpha = max(alpha, value)
+            moves[i].score = score
+            if value >= beta:
+                self.cutoff += 1
+                break
 
     def first_move(self, root: Board) -> Move:
         """
@@ -253,42 +241,37 @@ class Engine:
         print(f"Using quick heuristic")
         cells = root.best_sequence_cost_cells
         if not cells:
-            return Move(random.choice(list(root.successors)))
+            return Move(random.choice(list(root.get_successors())))
         return Move(random.choice(cells))
 
     def search_best_move(self, root: Board) -> tuple[Move | None, int]:
         """
         Uses an iterative deepening with MTDf search algorithm to find the best move
         """
-        test = []
-        print(f"time limit: {self.time_limit}")
-        print(f"root board:\n{root}")
         self.start_time = time()
         self.memory_hits = self.cutoff = self.evaluated_nodes = 0
         best = None
         if len(root.stones) < 2:
             return self.first_move(root), self.time_elapsed() / 1000
+        if self.debug:
+            print(f"Searching best move for player {1 if root.playing == 1 else 2}")
         for depth in range(1, self.max_depth + 1):
             if self.is_timeout():
-                print(f"Time limit reached for depth {depth}")
+                print(f"Time limit reached for depth {depth}\n")
                 break
             self.current_max_depth = depth
             self.clean_memory(len(root.move_history))
             self.alpha_beta(root, 0, -BIG_NUM, BIG_NUM)
             # self.negamax_ab_pruning(root, 0, -BIG_NUM, BIG_NUM)
-            print("after negamax")
             if not hash(root) in self.memory:
-                print(f"Time limit reached for depth {depth}")
+                print(f"Time limit reached for depth {depth}\n")
                 break
-            print("before sort")
-            self.debug_moves(root, self.memory[hash(root)], depth)
+            if self.debug:
+                self.debug_moves(root, self.memory[hash(root)], depth)
             best = self.memory[hash(root)].best
-            # if depth == 1:
-            #     test = deepcopy(self.memory[hash(root)])
-            #     test.lst = test.lst[:5]
-            # else:
-            #     if not best.coord in test:
-            #         print(f"Best move {best.coord} at depth {depth} not in the best moves at depth 1 {test}")
-            #         sys.exit(1)
-        print(f"Info: evaluated nodes={self.evaluated_nodes}, cutoffs={self.cutoff}, memory hits={self.memory_hits}")
+        if self.debug:
+            print(f"Info: evaluated nodes={self.evaluated_nodes}, ", end="")
+            print(f"cutoffs={self.cutoff}, memory hits={self.memory_hits}")
+            print(f"End of search ({self.time_elapsed() / 1000}ms), ", end="")
+            print(f"best move is {best} with score {best.score}\n")
         return best if best else self.quick_move(root), self.time_elapsed() / 1000
