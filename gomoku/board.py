@@ -57,22 +57,22 @@ SLICE_MAP = {
 }
 
 NEIGHBORS = (
-        (-2, -2),
-        (-2, 0),
-        (-2, 2),
-        (-1, -1),
-        (-1, 0),
-        (-1, 1),
-        (0, -2),
-        (0, -1),
-        (0, 1),
-        (0, 2),
-        (1, -1),
-        (1, 0),
-        (1, 1),
-        (2, -2),
-        (2, 0),
-        (2, 2),
+    (-1, -1),
+    (-2, -2),
+    (-1, 0),
+    (-2, 0),
+    (-1, 1),
+    (-2, 2),
+    (0, 1),
+    (0, 2),
+    (1, 1),
+    (2, 2),
+    (1, 0),
+    (2, 0),
+    (1, -1),
+    (2, -2),
+    (0, -1),
+    (0, -2),
 )
 
 CLOSE_NEIGHBORS = (
@@ -186,13 +186,13 @@ class Board:
         cells = [[player_repr[col] for col in row] for row in self.cells]
         y, x = self.move_history[-1][0]
         cells[y][x] = f"\033[91m{'X' if self.cells[y][x] == 1 else 'O'}\033[00m"
-        for y, x in self.get_successors():
+        for y, x in self.successors:
             cells[y][x] = f"\033[33m*\033[00m"
         s = "\nBoard:\n"
         s += " ".join([str(i % 10) for i in range(self.size)]) + "\n"
         s += "\n".join(" ".join(row + [str(i)]) for i, row in enumerate(cells))
         s += "\nSequence list:\n"
-        for seq in self.seq_list.values():
+        for seq in sorted(self.seq_list.values()):
             s += f"  {seq.to_string(self.playing, self.capture)}\n"
         s += f"Evaluation: {self.score} "
         s += f"(Sequences: {self.sequences_score}, Stones: {self.stones_score}, "
@@ -223,18 +223,6 @@ class Board:
         self.playing = 1
         self.last_seq_id = 0
         self.move_history = []
-    
-    @property
-    def best_sequence_cost_cells(self) -> tuple[Coord]:
-        best_seq, best_score = None, -1e20
-        for seq in self.seq_list.values():
-            current = seq.score(self.capture) * seq.player
-            if seq.player == -self.playing:
-                current *= NEXT_TURN_BONUS * -self.playing
-            if current > best_score:
-                best_seq = seq
-                best_score = current
-        return best_seq.cost_cells if best_seq else ()
 
     @property
     def capture_score(self) -> int:
@@ -320,14 +308,16 @@ class Board:
             return GameOver.NONE
         for seq in self.seq_list.values():
             if seq.is_win:
-                if self.capture and self.capturable_stones_in_sequences(seq):
-                    if self.last_chance:
-                        if seq.player == 1:
-                            return GameOver.BLACK_SEQUENCE_WIN
-                        else:
-                            return GameOver.WHITE_SEQUENCE_WIN
-                    self.last_chance = True
-                    return GameOver.NONE
+                if self.capture:
+                    count, _ = self.capturable_stones_in_sequences(seq)
+                    if count > 0:
+                        if self.last_chance:
+                            if seq.player == 1:
+                                return GameOver.BLACK_SEQUENCE_WIN
+                            else:
+                                return GameOver.WHITE_SEQUENCE_WIN
+                        self.last_chance = True
+                        return GameOver.NONE
                 if seq.player == 1:
                         return GameOver.BLACK_SEQUENCE_WIN
                 else:
@@ -530,10 +520,10 @@ class Board:
                 self.cells[pos] = self.playing
                 self.stones.append(pos)
                 self.update_sequences_at_added_stone(pos, self.playing)
-        self.successors = self.get_successors()
+        # self.successors = self.get_successors()
         self.playing *= -1
 
-    def add_move(self, pos: Coord, in_engine: bool = False) -> list[Coord]:
+    def add_move(self, pos: Coord, sort_successors: bool = False) -> list[Coord]:
         """
         Adds a move to the board by placing the player's stone id at the given position
         and updating the sequences around the new stone.
@@ -552,6 +542,17 @@ class Board:
         self.update_sequences_at_added_stone(pos, self.playing)
         self.playing = -self.cells[pos]
         self.successors = self.get_successors()
+        if sort_successors:
+            lst = []
+            for cell in self.successors:
+                self.add_move(cell)
+                lst.append((self.score, cell))
+                self.undo_last_move()
+            rev = self.playing == 1
+            sort_key = lambda x: x[0]
+            lst = sorted(lst, key=sort_key, reverse=rev)
+            self.successors = [c for _, c in lst]
+
         self.move_history.append((pos, capturable))
         return capturable
 
@@ -662,21 +663,36 @@ class Board:
                 threats.append(seq)
         return threats
     
-    def filter_successors(self, cell: Coord, close: bool = False) -> Iterable[Coord]:
+    def filter_successors(self, cell: Coord, close: bool = False) -> list[Coord]:
         """
         Filter out successors that are equivalent to the current board
         """
-        neighbors = self.cell_close_neighbors if close else self.cell_neighbors
-        return (c for c in neighbors[cell] if self.can_place(c))
+        # neighbors = self.cell_close_neighbors if close else self.cell_neighbors
+        # return (c for c in neighbors[cell] if self.can_place(c))
+        if close:
+            return [c for c in self.cell_close_neighbors[cell] if self.can_place(c)]
+        skip = False
+        successors = []
+        for i, offset in enumerate(NEIGHBORS):
+            if skip:
+                skip = False
+                continue
+            c = coord.add(cell, offset)
+            if self.can_place(c):
+                successors.append(c)
+            # not (i & 1) checks if i is even (used insteaf of i % 2 == 0 for perfs)
+            elif not (i & 1) and self.cells[c] == -self.playing:
+                skip = True # skip the next neighbor because there is an obstacle
+        return successors
     
-    def get_threats(self) -> list[Sequence]:
+    def get_threats(self) -> list[tuple[bool, Sequence]]:
         """
         Returns a list of sequences that are threats that can result in a win
         """
         threats = []
         for seq in self.seq_list.values():
-            if seq.is_threat():
-                threats.append(seq)
+            if (n := seq.is_threat(self.capture)) > 0:
+                threats.append((n == 2, seq)) # 1 = seq threat, 2 = capture threat
         return threats
     
     def get_successors(self) -> set[Coord]:
@@ -685,28 +701,41 @@ class Board:
         """
         successors = set()
 
+        # Case where no ally stones exist on the board
+        # Returns the closest neighbor of each enemy stone
         if not any(self.cells[c] == self.playing for c in self.stones):
             for stone in self.stones:
                 successors.update(self.filter_successors(stone, close=True))
             return successors
+
+        # Case where there are sequences that are threats
+        # Returns the forced moves to block/extend the threats
         threats = self.get_threats()
         if threats:
-            for seq in threats:
-                successors.update(seq.cost_cells)
-            return successors
-        for stone in self.stones:
-            neighbors = self.filter_successors(stone)
-            for cell in neighbors:
-                if cell in self.seq_map:
-                    successors.add(cell)
+            for is_capture, seq in threats:
+                if is_capture:
+                    successors.update(seq.flank_cells)
                 else:
-                    self.cells[cell] = self.playing
-                    for d in DIRECTIONS:
-                        seq = self.get_sequence(cell, d, self.cells[cell])
-                        if not seq.is_dead:
-                            successors.add(cell)
-                            break
-                    self.cells[cell] = 0
+                    if self.capture:
+                        count, captures = self.capturable_stones_in_sequences(seq)
+                        if count > 0:
+                            successors.update(captures)
+                    successors.update(seq.cost_cells)
+            return successors
+
+        # Case where there are no threats but there are sequences
+        # Returns all cost cells of the sequences
+        for seq in self.seq_list.values():
+            successors.update(seq.cost_cells)
+
+        any_sequences = True if self.seq_list else False
+        # Case for neighbors that are not related to existing sequences
+        # Returns the neighbors of all ally stones in range of 2 if no sequences exist
+        # or 1 if sequences exist
+        for stone in self.stones:
+            if self.cells[stone] == self.playing:
+                test = tuple(self.filter_successors(stone, close=any_sequences))
+                successors.update(test)
         return successors
 
     @staticmethod
@@ -791,22 +820,28 @@ class Board:
         tail = self.get_half_sequence(pos, coord.neg(dir), player)
         return head + tail if dir < coord.neg(dir) else tail + head
 
-    def capturable_stones_in_sequences(self, seq: Sequence) -> int:
+    def capturable_stones_in_sequences(self, seq: Sequence) -> tuple[int, list[Coord]]:
         """
-        Returns whether a sequence can be broken/reduced with a capture
+        Returns whether a sequence can be broken/reduced with a capture and the cell
+        that leads to the capture.
         """
         count = 0
+        captures = []
         for stone in seq:
             visited = set()
             for id in self.seq_map.get(stone, set()).copy():
                 s = self.seq_list[id]
                 if seq.id == id or seq.player != s.player:
                     continue
-                if s.capturable_sequence() != 0:
-                    count += 1
+                n, cells = s.capturable_sequence()
+                if abs(n) > 0:
+                    count += abs(n)
+                    captures.extend(cells)
                 visited.update((s.dir, coord.neg(s.dir)))
             for d in visited.symmetric_difference(SLICE_MAP.keys()):
                 s = self.get_sequence(stone, d, seq.player)
-                if s.capturable_sequence() != 0:
-                    count += 1
-        return count
+                n, cells = s.capturable_sequence()
+                if abs(n) > 0:
+                    count += abs(n)
+                    captures.extend(cells)
+        return count, captures

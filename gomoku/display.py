@@ -632,7 +632,7 @@ class Display:
         self.board_history.append((deepcopy(self.board), self.last_move))
         self.render_cell(move, self.player_turn)
         self.render_last_move(move)
-        captures = self.board.add_move(move)
+        captures = self.board.add_move(move, sort_successors=True)
         ###### DEBUG ######
         flag = False
         # print(f"Board before undo: {self.board}")

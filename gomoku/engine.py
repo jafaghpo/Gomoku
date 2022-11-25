@@ -42,7 +42,7 @@ class Successors:
 
     def __init__(self, state: Board, depth: int) -> None:
         lst = []
-        for pos in state.get_successors():
+        for pos in state.successors:
             if not state.is_free_double(pos, state.playing):
                 lst.append(Move(pos))
         self.lst = lst
@@ -232,17 +232,6 @@ class Engine:
         if root.cells[y][x] == 0:
             return Move(root.get_valid_pos(y, x), root.score + root.cell_values[y][x])
         return Move(root.get_valid_pos(y - 1, x - 1), root.score + root.cell_values[y - 1][x - 1])
-    
-    def quick_move(self, root: Board) -> Move:
-        """
-        Returns the best move with using a quick heuristic if the engine ran out of time
-        to find a move
-        """
-        print(f"Using quick heuristic")
-        cells = root.best_sequence_cost_cells
-        if not cells:
-            return Move(random.choice(list(root.get_successors())))
-        return Move(random.choice(cells))
 
     def search_best_move(self, root: Board) -> tuple[Move | None, int]:
         """
@@ -274,4 +263,4 @@ class Engine:
             print(f"cutoffs={self.cutoff}, memory hits={self.memory_hits}")
             print(f"End of search ({self.time_elapsed() / 1000}ms), ", end="")
             print(f"best move is {best} with score {best.score}\n")
-        return best if best else self.quick_move(root), self.time_elapsed() / 1000
+        return best if best else root.successors[0], self.time_elapsed() / 1000

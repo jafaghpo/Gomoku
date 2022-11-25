@@ -167,8 +167,15 @@ class Sequence:
         """
         Returns the coordinates of the cells that flank the sequence.
         """
-        head, tail = coord.sub(self.start, self.dir), coord.add(self.end, self.dir)
-        return self.filter_in_bounds((head, tail))
+        match self.is_blocked:
+            case Block.NO:
+                return coord.sub(self.start, self.dir), coord.add(self.end, self.dir)
+            case Block.HEAD:
+                return coord.add(self.end, self.dir),
+            case Block.TAIL:
+                return coord.sub(self.start, self.dir),
+            case Block.BOTH:
+                return (),
 
     @property
     def cost_cells(self) -> tuple[Coord]:
@@ -200,10 +207,10 @@ class Sequence:
         """
         s = f"[{self.id}]\t"
         s += f"\u001b[{'32' if self.player == 1 else '36'}m"
-        s += f"Player {1 if self.player == 1 else 2}\t"
-        s += f"start: {self.rest_cells[0]}\tdir: {DIR_STR[self.dir]}\t"
-        s += f"block: {self.is_blocked.name.lower()}\t"
-        s += f"score: {self.score(playing, capture)}\tshape: {self.shape}"
+        s += f"Player {1 if self.player == 1 else 2: <4}"
+        s += f"start: {str(self.start): <10}dir: {str(DIR_STR[self.dir]): <4}"
+        s += f"block: {self.is_blocked.name.lower(): <8}"
+        s += f"shape: {str(self.shape): <20}score: {self.score(playing, capture)}"
         s += f"\u001b[0m"
         return s
 
@@ -242,6 +249,9 @@ class Sequence:
             and self.spaces == other.spaces
             and self.is_blocked == other.is_blocked
         )
+    
+    def __lt__(self, other) -> bool:
+        return self.start < other.start
 
     def __len__(self) -> int:
         return sum(self.shape)
@@ -285,7 +295,7 @@ class Sequence:
         shape = self.shape
         if capture and self.player != playing and self.nb_holes == 0:
             tmp_capture = copy.copy(capture)
-            n = self.capturable_sequence()
+            n, _ = self.capturable_sequence()
             if n != 0:
                 tmp_capture[playing] += abs(n)
                 capture_score = Sequence.capture_score(tmp_capture[playing]) * playing
@@ -325,8 +335,6 @@ class Sequence:
         """
         Extends the sequence by one cell.
         """
-        if self.is_blocked == Block.TAIL:
-            print(self)
         if coord.add(self.end, self.dir) == pos:
             self.shape = self.shape[:-1] + (self.shape[-1] + 1,)
             self.spaces = (self.spaces[0], space)
@@ -334,17 +342,12 @@ class Sequence:
             self.shape += (1,)
             self.spaces = (self.spaces[0], space)
         if self.spaces[1] == 0:
-            if self.is_blocked + Block.TAIL == 4:
-                print(self)
-                print(f"pos: {pos}, space: {space}")
             self.is_blocked = Block(self.is_blocked + Block.TAIL)
 
     def extend_head(self, pos: Coord, space: int) -> None:
         """
         Extends the sequence by one cell.
         """
-        if self.is_blocked == Block.HEAD:
-            print(self)
         if coord.sub(self.start, self.dir) == pos:
             self.shape = (self.shape[0] + 1,) + self.shape[1:]
             self.spaces = (space, self.spaces[1])
@@ -353,9 +356,6 @@ class Sequence:
             self.spaces = (space, self.spaces[1])
         self.start = pos
         if self.spaces[0] == 0:
-            if self.is_blocked + Block.HEAD == 4:
-                print(f"pos: {pos}, space: {space}")
-                print(self)
             self.is_blocked = Block(self.is_blocked + Block.HEAD)
 
     def extend_hole(self, pos: Coord) -> None:
@@ -430,31 +430,40 @@ class Sequence:
         if self.is_blocked == Block.TAIL or self.is_blocked == Block.BOTH:
             self.is_blocked = Block(self.is_blocked - Block.TAIL)
 
-    def capturable_sequence(self) -> int:
+    def capturable_sequence(self) -> tuple[int, tuple[Coord]]:
         """
-        Returns whether the sequence is capturable.
+        Returns whether the sequence is capturable and the cell that can capture it
         """
+        head = (self.is_blocked & Block.HEAD) != 0 and self.shape[0] == 2
+        tail = (self.is_blocked & Block.TAIL) != 0 and self.shape[-1] == 2
+        match (head, tail):
+            case (False, False):
+                return 0, ()
+            case (True, False):
+                return 1, self.flank_cells if not self.nb_holes else (self.holes[0],)
+            case (False, True):
+                return -1, self.flank_cells if not self.nb_holes else (self.holes[-1],)
+            case (True, True):
+                match self.nb_holes:
+                    case 0: return 0, ()
+                    case 1: return 2, self.holes
+                    case _: return 2, (self.holes[0], self.holes[-1])
 
-        def is_blocked_by_opponent(block: tuple[Coord]) -> bool:
-            return block != () and coord.in_bound(block[0], Sequence.board_size)
-
-        head = int(is_blocked_by_opponent(self.block_head) and self.shape[0] == 2)
-        tail = int(is_blocked_by_opponent(self.block_tail) and self.shape[-1] == 2)
-        if self.nb_holes != 0 and head + tail == 2:
-            return 2
-        return head - tail
-
-    def is_threat(self) -> bool:
+    def is_threat(self, capture: dict[int, int] | None) -> int:
         """
         Returns the threat level of the sequence.
         """
         if self.is_dead:
-            return False
+            return 0
         if self.length > Sequence.sequence_win and len(self) >= Sequence.sequence_win - 1:
-            return True
+            return 1
         if len(self) >= Sequence.sequence_win - 1:
-            return True
+            return 1
         if len(self) >= Sequence.sequence_win - 2 and self.is_blocked == Block.NO:
-            return True
-        return False
+            return 1
+        if capture:
+            n, _ = self.capturable_sequence()
+            if abs(n) != 0 and capture[-self.player] + abs(n) >= Sequence.capture_win:
+                return 2
+        return 0
                 
