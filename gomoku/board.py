@@ -552,7 +552,6 @@ class Board:
             sort_key = lambda x: x[0]
             lst = sorted(lst, key=sort_key, reverse=rev)
             self.successors = [c for _, c in lst]
-
         self.move_history.append((pos, capturable))
         return capturable
 
@@ -706,7 +705,7 @@ class Board:
         if not any(self.cells[c] == self.playing for c in self.stones):
             for stone in self.stones:
                 successors.update(self.filter_successors(stone, close=True))
-            return successors
+            return set(c for c in successors if not self.is_free_double(c, self.playing))
 
         # Case where there are sequences that are threats
         # Returns the forced moves to block/extend the threats
@@ -721,7 +720,8 @@ class Board:
                         if count > 0:
                             successors.update(captures)
                     successors.update(seq.cost_cells)
-            return successors
+
+            return set(c for c in successors if not self.is_free_double(c, self.playing))
 
         # Case where there are no threats but there are sequences
         # Returns all cost cells of the sequences
@@ -736,7 +736,7 @@ class Board:
             if self.cells[stone] == self.playing:
                 test = tuple(self.filter_successors(stone, close=any_sequences))
                 successors.update(test)
-        return successors
+        return set(c for c in successors if not self.is_free_double(c, self.playing))
 
     @staticmethod
     @cache

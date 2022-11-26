@@ -174,7 +174,7 @@ class OptionMenu:
         Function called to modify the number of captures to win (1 capture = 2 stones)
         from a selector in the option menu
         """
-        if self.display.args.board >= 4:
+        if self.display.args.board >= 4 and not self.display.args.gravity:
             self.display.args.capture_win = int(number)
 
     def on_sequence_win_change(self, value: tuple, number: str):
@@ -204,6 +204,9 @@ class OptionMenu:
         """
         selected, index = value
         self.display.args.gravity = selected[1]
+        if self.display.args.gravity:
+            self.menu.get_widget("capture").set_value(0)
+            self.display.args.capture_win = 0
 
     def on_freedouble_change(self, value: tuple, freedouble: str):
         """
@@ -731,9 +734,7 @@ class Display:
                     continue
             else:
                 with cProfile.Profile() as pr:
-                    move, engine_time = self.engine.search_best_move(
-                        deepcopy(self.board)
-                    )
+                    move, engine_time = self.engine.search(deepcopy(self.board))
                 # stats = pstats.Stats(pr)
                 # stats.sort_stats(pstats.SortKey.TIME)
                 # if len(self.board_history) > 2:

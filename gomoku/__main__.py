@@ -89,6 +89,9 @@ def parse_args(argv: list[str]) -> Namespace:
     if args.free_double and args.sequence_win < 5:
         args.free_double = False
         print("Warning: Free double is enabled due to winning sequence less than 5")
+    if args.gravity and args.capture_win > 0:
+        args.capture_win = 0
+        print("Warning: Capture win is disabled due to gravity enabled")
     return args
 
 
