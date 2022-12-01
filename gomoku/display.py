@@ -3,13 +3,11 @@ import pygame_menu
 import numpy as np
 import sys
 import time
+from math import exp
 from copy import deepcopy
+
 from gomoku.board import Board, Coord, GameOver, Sequence
 from gomoku.engine import Engine
-import gomoku.coord as coord
-
-import cProfile
-import pstats
 
 SCREEN_SIZE = 800
 LINE_WIDTH = 2
@@ -140,8 +138,24 @@ class OptionMenu:
             ],
             onchange=self.on_freedouble_change,
         )
+        self.menu.add.selector(
+            "Debug",
+            [
+                ("Off", False),
+                ("On", True),
+            ],
+            onchange=self.on_debug_change,
+        )
 
         self.menu.add.button("Return to main menu", pygame_menu.events.RESET)
+
+    def on_debug_change(self, value: tuple, debug: str):
+        """
+        Function called to modify the debug mode
+        from a selector in the option menu
+        """
+        selected, index = value
+        self.display.args.debug = selected[1]
 
     def on_board_size_change(self, value: tuple, board_size: str):
         """
@@ -326,24 +340,29 @@ class GameMenu:
                 self.display.args.players = {1: "human", -1: "engine"}
                 self.display.args.time = 500
                 self.display.args.depth = 10
+                self.display.difficulty = 0
             case "Easy":
                 self.display.args.players = {1: "human", -1: "engine"}
                 self.display.args.time = 100
                 self.display.args.depth = 1
+                self.display.difficulty = 1
             case "Normal":
                 self.display.args.players = {1: "human", -1: "engine"}
                 self.display.args.time = 750
                 self.display.args.depth = 3
+                self.display.difficulty = 2
 
             case "Hard":
                 self.display.args.players = {1: "engine", -1: "human"}
                 self.display.args.time = 2000
                 self.display.args.depth = 10
+                self.display.difficulty = 3
 
     def on_start(self):
         """
         Function called when the start button is pressed to start the game
         """
+        self.display.weight = 2.5e-3 + 2.5e-3 * exp(0.5 * self.display.args.depth)
         self.display.screen = pygame.display.set_mode(
             (self.display.screen_size, self.display.screen_size)
         )
@@ -408,7 +427,7 @@ class PauseMenu:
         Resume the game when the resume button is pressed
         """
         self.menu.close(self.display.run())
-    
+
     def on_restart(self):
         """
         Restart the game when the restart button is pressed
@@ -429,7 +448,8 @@ class Display:
     def __init__(self, args):
         pygame.init()
         self.args = args
-        print(self.args)
+        self.args.time /= 1000
+        self.difficulty = 0
         self.cell_size = SCREEN_SIZE // (self.args.board + 1)
         self.screen_size = self.cell_size * 2 + (args.board - 1) * self.cell_size
         self.background = pygame.image.load(f"{TEXT_PATH}/classic_background.png")
@@ -441,6 +461,7 @@ class Display:
         }
         self.board = None
         self.engine = None
+        self.weight = 2.5e-3 + 2.5e-3 * exp(0.5 * self.args.depth)
         self.board_history = []
         self.last_move = None
         self.player_turn = 1
@@ -539,7 +560,7 @@ class Display:
         Render the time taken by the engine to compute the next move
         """
         font = pygame.font.SysFont(None, 24)
-        img = font.render(f"{time:.4f}", True, (0, 0, 0))
+        img = font.render(f"{time:.6f}", True, (0, 0, 0))
         self.screen.blit(img, (10, 10))
 
     def render_number_captures(self) -> None:
@@ -636,29 +657,6 @@ class Display:
         self.render_cell(move, self.player_turn)
         self.render_last_move(move)
         captures = self.board.add_move(move, sort_successors=True)
-        ###### DEBUG ######
-        flag = False
-        # print(f"Board before undo: {self.board}")
-        # print(f"Board successors: {self.board.successors}")
-        # self.board.undo_last_move()
-        # print(f"Board after undo: {self.board}")
-        # captures = self.board.add_move(move)
-        # print(f"Board after move: {self.board}")
-        for seq in self.board.seq_list.values():
-            for stone in seq:
-                if self.board.cells[stone] != seq.player:
-                    print(f"Error: invalid rest cell {stone} in sequence {seq.id}")
-                    flag = True
-            for stone in seq.block_cells:
-                if (
-                    coord.in_bound(stone, self.board.size)
-                    and self.board.cells[stone] != -seq.player
-                ):
-                    print(f"Error: invalid block cell {stone} in sequence {seq.id}")
-                    flag = True
-        if flag:
-            sys.exit(pygame.quit())
-        ###### END DEBUG ######
         self.last_move = move
         print(f"{'Black' if self.player_turn == 1 else 'White'} ", end="")
         print(f"placed a stone at {move}", end="")
@@ -679,7 +677,7 @@ class Display:
             self.render_engine_time(engine_time)
         self.render_last_move(move)
         self.update()
-    
+
     def game_over_to_string(self, game_over: GameOver) -> str:
         """
         Return the game over message
@@ -695,7 +693,7 @@ class Display:
                 return "Black won by capture count"
             case GameOver.WHITE_CAPTURE_WIN:
                 return "White won by capture count"
-    
+
     def modify_capture_weight(self, status: GameOver) -> None:
         """
         Modify the capture weight if the game is over
@@ -714,11 +712,16 @@ class Display:
         """
         if not self.board:
             self.board = Board(self.args)
-            self.engine = Engine(self.args.time, self.args.depth, self.args.debug)
+            self.engine = Engine(
+                self.args.time,
+                self.args.depth,
+                self.args.debug,
+                difficulty=self.difficulty,
+                weight=self.weight,
+            )
         self.render_board(bg=True, grid=True, cells=True, last_move=True)
         suggestion = False
         engine_time = None
-        print(self.args)
         while True:
             time.sleep(0.01)  # Reduces heavily the CPU usage
             pos = self.handle_event()
@@ -733,14 +736,7 @@ class Display:
                 if not pos or self.board.is_free_double(pos, self.player_turn):
                     continue
             else:
-                with cProfile.Profile() as pr:
-                    move, engine_time = self.engine.search(deepcopy(self.board))
-                # stats = pstats.Stats(pr)
-                # stats.sort_stats(pstats.SortKey.TIME)
-                # if len(self.board_history) > 2:
-                #     stats.dump_stats(
-                #         f"gomoku_b{self.args.board}_d{self.args.depth}_t{self.args.time}.prof"
-                #     )
+                move, engine_time = self.engine.search(self.board)
                 if not move:
                     self.game_over = True
                     continue

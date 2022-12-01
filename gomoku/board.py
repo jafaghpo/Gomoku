@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from enum import IntEnum
 import numpy as np
 from functools import cache
-from typing import ClassVar, Iterable
+from typing import ClassVar
 from argparse import Namespace
 
 from gomoku.sequence import Sequence, Block, BASE_SCORE
@@ -76,14 +76,14 @@ NEIGHBORS = (
 )
 
 CLOSE_NEIGHBORS = (
-        (-1, -1),
-        (-1, 0),
-        (-1, 1),
-        (0, -1),
-        (0, 1),
-        (1, -1),
-        (1, 0),
-        (1, 1),
+    (-1, -1),
+    (-1, 0),
+    (-1, 1),
+    (0, -1),
+    (0, 1),
+    (1, -1),
+    (1, 0),
+    (1, 1),
 )
 
 DIRECTIONS = ((0, -1), (-1, -1), (-1, 0), (-1, 1))
@@ -91,6 +91,7 @@ DIRECTIONS = ((0, -1), (-1, -1), (-1, 0), (-1, 1))
 CAPTURE_MOVE_CASES = ((-1, 1, 1, -1), (1, -1, -1, 1))
 
 NEXT_TURN_BONUS = BASE_SCORE
+
 
 class GameOver(IntEnum):
     NONE = 0
@@ -109,6 +110,7 @@ def get_cell_values(size: int) -> np.ndarray:
                 -y - 1, -x - 1
             ] = (min(x, y) + 1)
     return array
+
 
 def get_cell_neighbors(size: int, offsets: tuple[Coord]) -> dict[Coord, tuple[Coord]]:
     neighbors = {}
@@ -137,7 +139,7 @@ class Board:
     last_chance: bool
     playing: int
     last_seq_id: int
-    successors: set[Coord]
+    successors: list[Coord]
     move_history: list[Coord, list[Coord]]
 
     # Class constants shared by all instances
@@ -199,7 +201,7 @@ class Board:
         s += f"Capture: {self.capture_score})\n"
         s += f"Playing: {self.playing}\n"
         return s
-    
+
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Board):
             return False
@@ -208,10 +210,14 @@ class Board:
             and self.capture == other.capture
             and self.playing == other.playing
         )
-    
+
     def __hash__(self) -> int:
-        return hash(self.cells.tobytes() + str(self.capture).encode() + str(self.playing).encode())
-    
+        return hash(
+            self.cells.tobytes()
+            + str(self.capture).encode()
+            + str(self.playing).encode()
+        )
+
     def reset(self) -> None:
         self.cells = np.zeros((Board.size, Board.size), dtype=int)
         self.seq_map = {}
@@ -264,7 +270,6 @@ class Board:
         """
         return self.sequences_score + self.stones_score + self.capture_score
 
-
     @property
     def new_available_id(self) -> int:
         """
@@ -284,11 +289,15 @@ class Board:
         self.cells[pos] = player
         for dir in DIRECTIONS:
             seq = self.get_sequence(pos, dir, player)
-            if len(seq) == min(Board.sequence_win - 2, 3) and seq.is_blocked == Block.NO and seq.nb_holes <= 1:
+            if (
+                len(seq) == min(Board.sequence_win - 2, 3)
+                and seq.is_blocked == Block.NO
+                and seq.nb_holes <= 1
+            ):
                 free_double += 1
         self.cells[pos] = 0
         return free_double >= 2
-    
+
     def is_capture_win(self) -> bool:
         """
         Check if a capture win is possible
@@ -319,7 +328,7 @@ class Board:
                         self.last_chance = True
                         return GameOver.NONE
                 if seq.player == 1:
-                        return GameOver.BLACK_SEQUENCE_WIN
+                    return GameOver.BLACK_SEQUENCE_WIN
                 else:
                     return GameOver.WHITE_SEQUENCE_WIN
         if self.last_chance:
@@ -459,7 +468,9 @@ class Board:
         """
         seq = self.seq_list[id]
         space = seq.spaces[1] if block == Block.HEAD else seq.spaces[0]
-        length = space + coord.distance(pos, seq.end if block == Block.HEAD else seq.start)
+        length = space + coord.distance(
+            pos, seq.end if block == Block.HEAD else seq.start
+        )
         if length < Board.sequence_win:
             return self.remove_sequence(id)
         self.remove_sequence_spaces(pos, id, block, from_list=True)
@@ -505,7 +516,7 @@ class Board:
                 self.add_block_to_sequence(pos, id, block, to_list=True)
         for d in visited.intersection(DIRECTIONS).symmetric_difference(DIRECTIONS):
             self.add_sequence(self.get_sequence(pos, d, player))
-    
+
     def undo_last_move(self) -> None:
         """
         Undo the last move.
@@ -649,7 +660,9 @@ class Board:
         for dir in SLICE_MAP.keys():
             board_slice = SLICE_MAP[dir](self.cells, pos[0], pos[1], 4)
             if self.capturable_slice(board_slice, cases):
-                capturable.extend([coord.add(pos, dir), coord.add(pos, coord.add(dir, dir))])
+                capturable.extend(
+                    [coord.add(pos, dir), coord.add(pos, coord.add(dir, dir))]
+                )
         return capturable
 
     def get_threats(self, player: int) -> list[Sequence]:
@@ -661,7 +674,7 @@ class Board:
             if seq.player == player and seq.spaces[0] == 1 and seq.spaces[1] == 0:
                 threats.append(seq)
         return threats
-    
+
     def filter_successors(self, cell: Coord, close: bool = False) -> list[Coord]:
         """
         Filter out successors that are equivalent to the current board
@@ -677,13 +690,14 @@ class Board:
                 skip = False
                 continue
             c = coord.add(cell, offset)
+            print(f"i: {i}, offset: {offset}, c: {c}")
             if self.can_place(c):
                 successors.append(c)
             # not (i & 1) checks if i is even (used insteaf of i % 2 == 0 for perfs)
-            elif not (i & 1) and self.cells[c] == -self.playing:
-                skip = True # skip the next neighbor because there is an obstacle
+            elif coord.in_bound(c, Board.size) and not (i & 1) and self.cells[c[0]][c[1]] == -self.playing:
+                skip = True  # skip the next neighbor because there is an obstacle
         return successors
-    
+
     def get_threats(self) -> list[tuple[bool, Sequence]]:
         """
         Returns a list of sequences that are threats that can result in a win
@@ -691,10 +705,10 @@ class Board:
         threats = []
         for seq in self.seq_list.values():
             if (n := seq.is_threat(self.capture)) > 0:
-                threats.append((n == 2, seq)) # 1 = seq threat, 2 = capture threat
+                threats.append((n == 2, seq))  # 1 = seq threat, 2 = capture threat
         return threats
-    
-    def get_successors(self) -> set[Coord]:
+
+    def get_successors(self) -> list[Coord]:
         """
         Returns the coordinates of the neighbor cells that are useful for the heuristic
         """
@@ -705,7 +719,7 @@ class Board:
         if not any(self.cells[c] == self.playing for c in self.stones):
             for stone in self.stones:
                 successors.update(self.filter_successors(stone, close=True))
-            return set(c for c in successors if not self.is_free_double(c, self.playing))
+            return [c for c in successors if not self.is_free_double(c, self.playing)]
 
         # Case where there are sequences that are threats
         # Returns the forced moves to block/extend the threats
@@ -721,7 +735,7 @@ class Board:
                             successors.update(captures)
                     successors.update(seq.cost_cells)
 
-            return set(c for c in successors if not self.is_free_double(c, self.playing))
+            return [c for c in successors if not self.is_free_double(c, self.playing)]
 
         # Case where there are no threats but there are sequences
         # Returns all cost cells of the sequences
@@ -736,7 +750,7 @@ class Board:
             if self.cells[stone] == self.playing:
                 test = tuple(self.filter_successors(stone, close=any_sequences))
                 successors.update(test)
-        return set(c for c in successors if not self.is_free_double(c, self.playing))
+        return [c for c in successors if not self.is_free_double(c, self.playing)]
 
     @staticmethod
     @cache
@@ -789,9 +803,13 @@ class Board:
         """
         Returns the number of empty or ally cells after a sequence in a direction.
         """
-        pos = coord.add(pos, dir) # skip the first stone
+        pos = coord.add(pos, dir)  # skip the first stone
         spaces = 0
-        while spaces < Board.sequence_win and coord.in_bound(pos, Board.size) and self.cells[pos] != opponent:
+        while (
+            spaces < Board.sequence_win
+            and coord.in_bound(pos, Board.size)
+            and self.cells[pos] != opponent
+        ):
             pos = coord.add(pos, dir)
             spaces += 1
         return spaces

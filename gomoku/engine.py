@@ -1,10 +1,10 @@
+from dataclasses import dataclass
+from random import uniform, choice
+import time
+
 from gomoku.board import Board
 from gomoku.coord import Coord
-import time
-from dataclasses import dataclass
-import multiprocessing as mp
 
-# Move = tuple[Coord, float]
 
 @dataclass
 class Move:
@@ -16,28 +16,30 @@ class Move:
 
     coord: Coord
     score: float | None = None
-    
+
     def __lt__(self, other):
         return self.score < other.score
-    
+
     def __eq__(self, other):
         return self.score == other.score
-    
+
     def __repr__(self) -> str:
         return f"Move[coord={self.coord}, score={self.score}]"
+
 
 @dataclass
 class Engine:
     """
     Engine class
     """
+
     time_limit: int = 500
     max_depth: int = 10
-    current_max_depth = 2
+    current_max_depth: int = 2
     debug: bool = False
     start_time: float = 0
-    cutoff: int = 0
-    evaluated_nodes: int = 0
+    difficulty: int = 0
+    weight: float = 0.5
 
     def debug_search(self, root: Board, moves: list[Move], depth: int) -> None:
         """
@@ -56,37 +58,72 @@ class Engine:
         for move in moves[:9]:
             print(f"{move.coord}: {move.score}")
 
+    def optimize(func):
+        """
+        Decorator to optimize the alpha-beta search
+        """
+
+        def inner(self, root: Board) -> tuple[list[Move], int]:
+            results = []
+            best_depth = 0
+            for cell in root.successors[:4]:
+                root.add_move(cell)
+                score, depth_reached = func(self, root)
+                root.undo_last_move()
+                best_depth = max(best_depth, depth_reached)
+                results.append(Move(cell, score))
+            results.sort(reverse=(root.playing == 1))
+            return results, best_depth
+
+        return inner
+
+    def change_weight(func):
+        """
+        Decorator to change the weight of the evaluation function
+        """
+
+        def inner(self, *args, **kwargs):
+            calc_weight = self.time_elapsed
+            res = func(self, *args, **kwargs)
+            l, h = -self.weight * 0.1, self.weight * 0.1
+            n = uniform(l, h)
+            while calc_weight() < self.weight + n:
+                l += 0.01
+                h += 0.01
+            return res
+
+        return inner
+
     def time_elapsed(self) -> int:
         """
         Returns the time elapsed since the start of the search
         """
-        return round(time.time() - self.start_time)
-    
+        return time.time() - self.start_time
+
     def is_timeout(self) -> bool:
         """
         Returns True if the search has timed out
         """
-        return self.time_elapsed() * 1000 >= self.time_limit - 50
-    
+        return self.time_elapsed() >= self.time_limit - 0.01
+
     def first_move(self, root: Board) -> Move:
         """
         Returns the first move of the game
         """
         y, x = root.size // 2, root.size // 2
         if root.cells[y][x] == 0:
-            return Move(root.get_valid_pos(y, x), root.score + root.cell_values[y][x])
-        return Move(root.get_valid_pos(y - 1, x - 1), root.score + root.cell_values[y - 1][x - 1])
-    
+            return Move(root.get_valid_pos(y, x))
+        return Move(root.get_valid_pos(y - 1, x - 1))
 
     def alpha_beta(self, state: Board, depth: int, alpha: float, beta: float) -> float:
         """
         Returns the best score for the engine by running an alpha-beta search
         """
-        if depth == self.current_max_depth or state.is_game_over or self.is_timeout():
-            self.evaluated_nodes += 1
+        if self.is_timeout():
+            raise TimeoutError
+        if depth == self.current_max_depth or state.is_game_over():
             return state.score
         if state.playing == 1:
-            print(f"Maximizing at depth {depth}")
             score = -float("inf")
             for cell in state.successors:
                 state.add_move(cell)
@@ -98,7 +135,6 @@ class Engine:
                     break
             return score
         else:
-            print(f"Minimizing at depth {depth}")
             score = float("inf")
             for cell in state.successors:
                 state.add_move(cell)
@@ -110,7 +146,8 @@ class Engine:
                     break
             return score
 
-
+    @change_weight
+    @optimize
     def iterative_deepening(self, root: Board) -> tuple[float, int]:
         """
         Performs an iterative deepening search on the given state of the board
@@ -118,34 +155,28 @@ class Engine:
         """
         best = -float("inf") if root.playing == 1 else float("inf")
         for depth in range(2, self.max_depth + 1):
-            if self.is_timeout():
-                break
             self.current_max_depth = depth
-            score = self.alpha_beta(root, depth, -float("inf"), float("inf"))
-            print(f"Depth {depth} - Score: {score} - Time: {self.time_elapsed()}s - Evaluated nodes: {self.evaluated_nodes} - Cutoff: {self.cutoff}")
+            try:
+                score = self.alpha_beta(root, depth, -float("inf"), float("inf"))
+            except TimeoutError:
+                break
             best = max(best, score)
         return best, self.current_max_depth
 
-    
-    def search(self, root: Board) -> tuple[Move | None, int]:
+    def search(self, root: Board) -> tuple[Move | None, float]:
         """
         Returns the best move for the engine by running an iterative deepening search
         """
-        self.cutoff = self.evaluated_nodes = 0
-        if len(root.stones) < 2:
-            return self.first_move(root), time.time() / 1000
-        print(f"Searching best move for player {1 if root.playing == 1 else 2}")
         self.start_time = time.time()
-        results = []
-        depth = 2
-        for cell in root.successors:
-            root.add_move(cell)
-            score, depth_reached = self.iterative_deepening(root)
-            print(f"Move {cell} reached depth {depth_reached} with score {score}")
-            depth = max(depth, depth_reached)
-            root.undo_last_move()
-            results.append(Move(cell, score))
-        results.sort(reverse=(root.playing == 1))
+        if len(root.stones) < 2:
+            return self.first_move(root), self.time_elapsed()
+        results, depth = self.iterative_deepening(root)
         if self.debug:
             self.debug_search(root, results, depth)
-        return results[0], self.time_elapsed()
+        match self.difficulty:
+            case 1:
+                return choice(results[:3]), self.time_elapsed()
+            case 2:
+                return choice(results[:2]), self.time_elapsed()
+            case _:
+                return results[0], self.time_elapsed()

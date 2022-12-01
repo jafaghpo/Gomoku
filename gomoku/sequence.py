@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from enum import IntEnum
+
 # from collections import namedtuple
 from functools import cache
 from typing import ClassVar, Iterator
@@ -30,7 +31,6 @@ class Block(IntEnum):
         Returns the Block enum value corresponding to the tuple.
         """
         return Block.HEAD if t[0] == -1 or (t[0] == 0 and t[1] == -1) else Block.TAIL
-
 
 
 DIR_STR = {
@@ -144,8 +144,13 @@ class Sequence:
         """
         max_len_head = min(self.spaces[0], max(Sequence.sequence_win - self.length, 2))
         max_len_tail = min(self.spaces[1], max(Sequence.sequence_win - self.length, 2))
-        head = tuple(coord.add(self.start, coord.mul(coord.neg(self.dir), i + 1)) for i in range(max_len_head))
-        tail = tuple(coord.add(self.end, coord.mul(self.dir, i + 1)) for i in range(max_len_tail))
+        head = tuple(
+            coord.add(self.start, coord.mul(coord.neg(self.dir), i + 1))
+            for i in range(max_len_head)
+        )
+        tail = tuple(
+            coord.add(self.end, coord.mul(self.dir, i + 1)) for i in range(max_len_tail)
+        )
         return self.filter_in_bounds(head), self.filter_in_bounds(tail)
 
     @property
@@ -171,11 +176,11 @@ class Sequence:
             case Block.NO:
                 return coord.sub(self.start, self.dir), coord.add(self.end, self.dir)
             case Block.HEAD:
-                return coord.add(self.end, self.dir),
+                return (coord.add(self.end, self.dir),)
             case Block.TAIL:
-                return coord.sub(self.start, self.dir),
+                return (coord.sub(self.start, self.dir),)
             case Block.BOTH:
-                return (),
+                return ((),)
 
     @property
     def cost_cells(self) -> tuple[Coord]:
@@ -200,7 +205,7 @@ class Sequence:
         Returns True if the sequence is winning.
         """
         return max(self.shape) >= Sequence.sequence_win
-    
+
     def to_string(self, playing: int, capture: dict[int, int] | None = None) -> str:
         """
         Returns a string representation of the sequence.
@@ -249,7 +254,7 @@ class Sequence:
             and self.spaces == other.spaces
             and self.is_blocked == other.is_blocked
         )
-    
+
     def __lt__(self, other) -> bool:
         return self.start < other.start
 
@@ -414,7 +419,10 @@ class Sequence:
         self.shape = (self.shape[0] - 1,) + self.shape[1:]
         if self.shape[0] == 0:
             self.shape = self.shape[1:]
-        self.spaces = (self.spaces[0] + coord.distance(self.start, start), self.spaces[1])
+        self.spaces = (
+            self.spaces[0] + coord.distance(self.start, start),
+            self.spaces[1],
+        )
         if self.is_blocked == Block.HEAD or self.is_blocked == Block.BOTH:
             self.is_blocked = Block(self.is_blocked - Block.HEAD)
 
@@ -445,9 +453,12 @@ class Sequence:
                 return -1, self.flank_cells if not self.nb_holes else (self.holes[-1],)
             case (True, True):
                 match self.nb_holes:
-                    case 0: return 0, ()
-                    case 1: return 2, self.holes
-                    case _: return 2, (self.holes[0], self.holes[-1])
+                    case 0:
+                        return 0, ()
+                    case 1:
+                        return 2, self.holes
+                    case _:
+                        return 2, (self.holes[0], self.holes[-1])
 
     def is_threat(self, capture: dict[int, int] | None) -> int:
         """
@@ -455,7 +466,10 @@ class Sequence:
         """
         if self.is_dead:
             return 0
-        if self.length > Sequence.sequence_win and len(self) >= Sequence.sequence_win - 1:
+        if (
+            self.length > Sequence.sequence_win
+            and len(self) >= Sequence.sequence_win - 1
+        ):
             return 1
         if len(self) >= Sequence.sequence_win - 1:
             return 1
@@ -466,4 +480,3 @@ class Sequence:
             if abs(n) != 0 and capture[-self.player] + abs(n) >= Sequence.capture_win:
                 return 2
         return 0
-                
