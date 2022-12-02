@@ -313,6 +313,7 @@ class GameMenu:
                     self.display.cell_size * 2
                     + (self.display.args.board - 1) * self.display.cell_size
                 )
+                self.display.args.sequence_win = 4
                 self.display.args.capture_win = 0
             case "tictactoe":
                 self.display.args.board = 3
@@ -326,6 +327,9 @@ class GameMenu:
                 self.display.args.gravity = False
 
             case "freestyle":
+                self.display.args.board = 15
+                self.display.args.sequence_win = 5
+                self.display.args.gravity = False
                 self.display.args.capture_win = 0
                 self.display.args.free_double = False
 
@@ -363,6 +367,9 @@ class GameMenu:
         Function called when the start button is pressed to start the game
         """
         self.display.weight = 2.5e-3 + 2.5e-3 * exp(0.5 * self.display.args.depth)
+        self.display.weight *= 1 + 1e-1 * (self.display.args.sequence_win - 5)
+        if self.display.args.gravity or self.display.args.board < 7:
+            self.display.weight = 0
         self.display.screen = pygame.display.set_mode(
             (self.display.screen_size, self.display.screen_size)
         )
@@ -454,6 +461,10 @@ class Display:
         self.screen_size = self.cell_size * 2 + (args.board - 1) * self.cell_size
         self.background = pygame.image.load(f"{TEXT_PATH}/classic_background.png")
         self.screen = pygame.display.set_mode((self.screen_size, self.screen_size))
+        self.weight = 2.5e-3 + 2.5e-3 * exp(0.5 * self.args.depth)
+        self.weight *= 1 + 1e-1 * (self.args.sequence_win - 5)
+        if self.args.gravity or self.args.board < 7:
+            self.weight = 0
         pygame.display.set_caption("Gomoku")
         self.stone_text = {
             1: f"{TEXT_PATH}/classic_black_stone.png",
@@ -461,7 +472,6 @@ class Display:
         }
         self.board = None
         self.engine = None
-        self.weight = 2.5e-3 + 2.5e-3 * exp(0.5 * self.args.depth)
         self.board_history = []
         self.last_move = None
         self.player_turn = 1
@@ -569,8 +579,8 @@ class Display:
         """
         font = pygame.font.SysFont(None, 24)
         p1, p2 = self.board.capture.values()
-        img = font.render(f"Captures:   {p1} : {p2}", True, (0, 0, 0))
-        self.screen.blit(img, (SCREEN_SIZE - 150, 10))
+        img = font.render(f"Captures: {p1} : {p2}", True, (0, 0, 0))
+        self.screen.blit(img, (SCREEN_SIZE - 160, 10))
 
     def render_player_win(self, msg: str) -> None:
         """
@@ -719,6 +729,7 @@ class Display:
                 difficulty=self.difficulty,
                 weight=self.weight,
             )
+        print(self.args)
         self.render_board(bg=True, grid=True, cells=True, last_move=True)
         suggestion = False
         engine_time = None
@@ -735,8 +746,12 @@ class Display:
                     suggestion = True
                 if not pos or self.board.is_free_double(pos, self.player_turn):
                     continue
+                else:
+                    print("Human move:", pos)
             else:
-                move, engine_time = self.engine.search(self.board)
+                print("Engine is thinking...")
+                move, engine_time = self.engine.search(deepcopy(self.board))
+                print(f"Engine move found: {move}")
                 if not move:
                     self.game_over = True
                     continue

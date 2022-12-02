@@ -531,7 +531,6 @@ class Board:
                 self.cells[pos] = self.playing
                 self.stones.append(pos)
                 self.update_sequences_at_added_stone(pos, self.playing)
-        # self.successors = self.get_successors()
         self.playing *= -1
 
     def add_move(self, pos: Coord, sort_successors: bool = False) -> list[Coord]:
@@ -690,11 +689,9 @@ class Board:
                 skip = False
                 continue
             c = coord.add(cell, offset)
-            print(f"i: {i}, offset: {offset}, c: {c}")
             if self.can_place(c):
                 successors.append(c)
-            # not (i & 1) checks if i is even (used insteaf of i % 2 == 0 for perfs)
-            elif coord.in_bound(c, Board.size) and not (i & 1) and self.cells[c[0]][c[1]] == -self.playing:
+            elif not (i & 1):  # if i is even
                 skip = True  # skip the next neighbor because there is an obstacle
         return successors
 
@@ -719,7 +716,11 @@ class Board:
         if not any(self.cells[c] == self.playing for c in self.stones):
             for stone in self.stones:
                 successors.update(self.filter_successors(stone, close=True))
-            return [c for c in successors if not self.is_free_double(c, self.playing)]
+            successors = set(
+                c for c in successors if not self.is_free_double(c, self.playing)
+            )
+            if successors:
+                return list(successors)
 
         # Case where there are sequences that are threats
         # Returns the forced moves to block/extend the threats
@@ -727,20 +728,31 @@ class Board:
         if threats:
             for is_capture, seq in threats:
                 if is_capture:
-                    successors.update(seq.flank_cells)
+                    for c in seq.flank_cells:
+                        if self.can_place(c):
+                            successors.add(c)
                 else:
                     if self.capture:
                         count, captures = self.capturable_stones_in_sequences(seq)
                         if count > 0:
-                            successors.update(captures)
-                    successors.update(seq.cost_cells)
-
-            return [c for c in successors if not self.is_free_double(c, self.playing)]
+                            for c in captures:
+                                if self.can_place(c):
+                                    successors.add(c)
+                    for c in seq.cost_cells:
+                        if self.can_place(c):
+                            successors.add(c)
+            successors = set(
+                c for c in successors if not self.is_free_double(c, self.playing)
+            )
+            if successors:
+                return list(successors)
 
         # Case where there are no threats but there are sequences
         # Returns all cost cells of the sequences
         for seq in self.seq_list.values():
-            successors.update(seq.cost_cells)
+            for c in seq.cost_cells:
+                if self.can_place(c):
+                    successors.add(c)
 
         any_sequences = True if self.seq_list else False
         # Case for neighbors that are not related to existing sequences
@@ -748,9 +760,18 @@ class Board:
         # or 1 if sequences exist
         for stone in self.stones:
             if self.cells[stone] == self.playing:
-                test = tuple(self.filter_successors(stone, close=any_sequences))
-                successors.update(test)
-        return [c for c in successors if not self.is_free_double(c, self.playing)]
+                successors.update(self.filter_successors(stone, close=any_sequences))
+        successors = set(
+            c for c in successors if not self.is_free_double(c, self.playing)
+        )
+        if successors:
+            return list(successors)
+        for stone in self.stones:
+            successors.update(self.filter_successors(stone, close=True))
+        successors = set(
+            c for c in successors if not self.is_free_double(c, self.playing)
+        )
+        return list(successors)
 
     @staticmethod
     @cache
