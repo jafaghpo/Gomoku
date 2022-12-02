@@ -746,12 +746,8 @@ class Display:
                     suggestion = True
                 if not pos or self.board.is_free_double(pos, self.player_turn):
                     continue
-                else:
-                    print("Human move:", pos)
             else:
-                print("Engine is thinking...")
                 move, engine_time = self.engine.search(deepcopy(self.board))
-                print(f"Engine move found: {move}")
                 if not move:
                     self.game_over = True
                     continue
