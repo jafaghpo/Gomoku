@@ -745,7 +745,7 @@ class Display:
                 continue
             if self.args.players[self.player_turn] == "human":
                 if self.args.move_suggestion and not suggestion:
-                    suggestion, _ = self.engine.search_best_move(self.board)
+                    suggestion, _ = self.engine.search(deepcopy(self.board))
                     self.render_indicator(suggestion.coord, HELP_MOVE_KEY)
                     self.update()
                     suggestion = True
