@@ -332,6 +332,11 @@ class GameMenu:
                 self.display.args.gravity = False
                 self.display.args.capture_win = 0
                 self.display.args.free_double = False
+                self.display.cell_size = SCREEN_SIZE // (self.display.args.board + 1)
+                self.display.screen_size = (
+                    self.display.cell_size * 2
+                    + (self.display.args.board - 1) * self.display.cell_size
+                )
 
     def on_difficulty_change(self, value: tuple, difficulty: str):
         """
