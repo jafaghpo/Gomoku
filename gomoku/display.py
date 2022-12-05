@@ -729,7 +729,7 @@ class Display:
                 difficulty=self.difficulty,
                 weight=self.weight,
             )
-        print(self.args)
+        # print(self.args)
         self.render_board(bg=True, grid=True, cells=True, last_move=True)
         suggestion = False
         engine_time = None
