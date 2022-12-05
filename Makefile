@@ -1,21 +1,24 @@
 NAME := gomoku
 WORKDIR ?= .
 
-.PHONY: install clean
+.PHONY: install all clean fclean re
 
-install_prod:
-	@python3 -m pip install -e .
+$(NAME): install
 
-install_dev:
-	@python3 -m pip install -e .[dev]
+install:
+	@python3 -m pip install -e $(WORKDIR)
+
+all:
+	@make $(NAME)
 
 clean:
 	@python3 setup.py clean
+
+fclean: clean
 	@rm -rf $(NAME)/__pycache__/	2> /dev/null || true
 	@rm -rf tests/__pycache__/			2> /dev/null || true
 	@rm -rf $(NAME).egg-info/ 		2> /dev/null || true
-	@find . -iname "*.pyc" -delete		2> /dev/null || true
+	@find $(WORKDIR) -iname "*.pyc" -delete		2> /dev/null || true
 
-re_prod: clean install_prod
-
-re_dev: clean install_dev
+re: fclean
+	@make all

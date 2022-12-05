@@ -18,17 +18,16 @@ conda deactivate
 
 To build the Gomoku program, run
 ```bash
-make install
-```
-
-Alternatively, to build the Gomoku with dev dependencies, run
-```bash
-make install_dev
+make
 ```
 
 You can also clean the package using
 ```bash
 make clean
+```
+or
+```bash
+make fclean
 ```
 
 ## Usage
