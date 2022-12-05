@@ -728,9 +728,9 @@ class Display:
         if not self.board:
             self.board = Board(self.args)
             self.engine = Engine(
-                self.args.time,
-                self.args.depth,
-                self.args.debug,
+                time_limit=self.args.time,
+                max_depth=self.args.depth,
+                debug=self.args.debug,
                 difficulty=self.difficulty,
                 weight=self.weight,
             )

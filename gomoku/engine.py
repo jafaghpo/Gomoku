@@ -5,6 +5,7 @@ import time
 from gomoku.board import Board
 from gomoku.coord import Coord
 
+BEST_MOVES = 9
 
 @dataclass
 class Move:
@@ -35,11 +36,11 @@ class Engine:
 
     time_limit: int = 500
     max_depth: int = 10
-    current_max_depth: int = 2
     debug: bool = False
     start_time: float = 0
     difficulty: int = 0
     weight: float = 0.5
+    current_max_depth: int = 2
 
     def debug_search(self, root: Board, moves: list[Move], depth: int) -> None:
         """
@@ -66,7 +67,7 @@ class Engine:
         def inner(self, root: Board) -> tuple[list[Move], int]:
             results = []
             best_depth = 0
-            for cell in root.successors[:4]:
+            for cell in root.successors[:BEST_MOVES]:
                 root.add_move(cell)
                 score, depth_reached = func(self, root)
                 root.undo_last_move()
@@ -85,7 +86,7 @@ class Engine:
         def inner(self, *args, **kwargs):
             calc_weight = self.time_elapsed
             res = func(self, *args, **kwargs)
-            l, h = -self.weight * 0.1, self.weight * 0.1
+            l, h = -self.weight * 0.02, self.weight * 0.02
             n = uniform(l, h)
             while calc_weight() < self.weight + n:
                 l += 0.01

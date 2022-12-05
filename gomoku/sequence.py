@@ -191,6 +191,13 @@ class Sequence:
         end = min(max(Sequence.sequence_win - self.length, 0), 2)
         head, tail = self.space_cells
         return self.filter_in_bounds(self.holes + head[:end] + tail[:end])
+    
+    @property
+    def threat_cells(self) -> tuple[Coord]:
+        """
+        Returns the coordinates of the cells that are threats to the sequence.
+        """
+        return self.filter_in_bounds(self.flank_cells + self.holes)
 
     @property
     def is_dead(self) -> bool:

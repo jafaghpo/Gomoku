@@ -64,4 +64,4 @@ def in_bound(t: Coord, size: int) -> bool:
     """
     Returns True if the Coord is between a certain bound.
     """
-    return 0 <= t[0] < size and 0 <= t[1] < size
+    return t and 0 <= t[0] < size and 0 <= t[1] < size

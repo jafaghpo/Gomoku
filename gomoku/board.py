@@ -138,7 +138,6 @@ class Board:
     capture: dict[int, int] | None
     last_chance: bool
     playing: int
-    last_seq_id: int
     successors: list[Coord]
     move_history: list[Coord, list[Coord]]
 
@@ -165,7 +164,6 @@ class Board:
         self.capture = {1: 0, -1: 0} if args.capture_win else None
         self.last_chance = False
         self.playing = 1
-        self.last_seq_id = 0
         self.move_history = []
 
         Board.cell_values = get_cell_values(args.board)
@@ -227,7 +225,6 @@ class Board:
         self.capture = {1: 0, -1: 0} if Board.capture_win else None
         self.last_chance = False
         self.playing = 1
-        self.last_seq_id = 0
         self.move_history = []
 
     @property
@@ -401,8 +398,7 @@ class Board:
         if seq.is_dead:
             return
         if seq.id == -1:
-            seq.id = self.last_seq_id
-            self.last_seq_id += 1
+            seq.id = self.new_available_id
         for cell in seq:
             self.seq_map.setdefault(cell, set()).add(seq.id)
         for cell in seq.growth_cells:
@@ -728,7 +724,7 @@ class Board:
         if threats:
             for is_capture, seq in threats:
                 if is_capture:
-                    for c in seq.flank_cells:
+                    for c in seq.threat_cells:
                         if self.can_place(c):
                             successors.add(c)
                 else:
@@ -738,7 +734,7 @@ class Board:
                             for c in captures:
                                 if self.can_place(c):
                                     successors.add(c)
-                    for c in seq.cost_cells:
+                    for c in seq.threat_cells:
                         if self.can_place(c):
                             successors.add(c)
             successors = set(
