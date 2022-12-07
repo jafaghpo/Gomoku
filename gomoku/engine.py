@@ -170,14 +170,19 @@ class Engine:
         """
         self.start_time = time.time()
         if len(root.stones) < 2:
+            print(f"Engine found best move {self.first_move(root).coord} at depth 0")
             return self.first_move(root), self.time_elapsed()
+        if self.max_depth == 1 or len(root.successors) == 1:
+            print(f"Engine found best move {root.successors[0]} at depth 1")
+            return Move(root.successors[0]), self.time_elapsed()
         results, depth = self.iterative_deepening(root)
         if self.debug:
             self.debug_search(root, results, depth)
-        match self.difficulty:
-            case 1:
-                return choice(results[:3]), self.time_elapsed()
-            case 2:
-                return choice(results[:2]), self.time_elapsed()
-            case _:
-                return results[0], self.time_elapsed()
+        move = results[0]
+        if self.difficulty == 1:
+            move = choice(results[:3])
+        elif self.difficulty == 2:
+            move = choice(results[:2])
+        print(f"Engine found best move {move.coord} at depth {depth}")
+        return move, self.time_elapsed()
+        

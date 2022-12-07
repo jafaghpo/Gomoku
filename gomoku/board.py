@@ -184,7 +184,7 @@ class Board:
     def __str__(self) -> str:
         player_repr = {0: ".", 1: "\u001b[32mX\033[00m", -1: "\u001b[36mO\033[00m"}
         cells = [[player_repr[col] for col in row] for row in self.cells]
-        y, x = self.move_history[-1][0]
+        y, x = self.last_move
         cells[y][x] = f"\033[91m{'X' if self.cells[y][x] == 1 else 'O'}\033[00m"
         for y, x in self.successors:
             cells[y][x] = f"\033[33m*\033[00m"
@@ -226,6 +226,10 @@ class Board:
         self.last_chance = False
         self.playing = 1
         self.move_history = []
+    
+    @property
+    def last_move(self) -> Coord:
+        return self.move_history[-1][0]
 
     @property
     def capture_score(self) -> int:
@@ -284,6 +288,10 @@ class Board:
             return False
         free_double = 0
         self.cells[pos] = player
+        capturable = self.capturable_stones(pos, CAPTURE_MOVE_CASES)
+        if capturable:
+            self.cells[pos] = 0
+            return False
         for dir in DIRECTIONS:
             seq = self.get_sequence(pos, dir, player)
             if (
@@ -322,6 +330,9 @@ class Board:
                                 return GameOver.BLACK_SEQUENCE_WIN
                             else:
                                 return GameOver.WHITE_SEQUENCE_WIN
+                        print(f"Player {1 if seq.player == 1 else 2} created ", end='')
+                        print("a winning sequence but the opponent ", end='')
+                        print("can still capture and break it")
                         self.last_chance = True
                         return GameOver.NONE
                 if seq.player == 1:

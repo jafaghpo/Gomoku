@@ -734,7 +734,6 @@ class Display:
                 difficulty=self.difficulty,
                 weight=self.weight,
             )
-        # print(self.args)
         self.render_board(bg=True, grid=True, cells=True, last_move=True)
         suggestion = False
         engine_time = None
@@ -749,7 +748,10 @@ class Display:
                     self.render_indicator(suggestion.coord, HELP_MOVE_KEY)
                     self.update()
                     suggestion = True
-                if not pos or self.board.is_free_double(pos, self.player_turn):
+                if not pos:
+                    continue
+                if self.board.is_free_double(pos, self.player_turn):
+                    print(f"Cannot play at {pos} due to the free double rule")
                     continue
             else:
                 move, engine_time = self.engine.search(deepcopy(self.board))
