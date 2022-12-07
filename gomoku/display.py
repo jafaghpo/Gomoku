@@ -765,6 +765,7 @@ class Display:
             suggestion = False
             status = self.board.is_game_over()
             if status != GameOver.NONE:
+                print(self.game_over_to_string(status))
                 self.game_over = True
                 self.modify_capture_weight(status)
                 game_over_msg = self.game_over_to_string(status)
