@@ -729,7 +729,7 @@ class Display:
             self.board = Board(self.args)
             self.engine = Engine(
                 time_limit=self.args.time,
-                max_depth=self.args.depth,
+                depth_limit=self.args.depth,
                 debug=self.args.debug,
                 difficulty=self.difficulty,
                 weight=self.weight,

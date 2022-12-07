@@ -5,7 +5,7 @@ import time
 from gomoku.board import Board
 from gomoku.coord import Coord
 
-BEST_MOVES = 9
+BEST_MOVES = 5
 
 @dataclass
 class Move:
@@ -35,12 +35,12 @@ class Engine:
     """
 
     time_limit: int = 500
-    max_depth: int = 10
+    depth_limit: int = 10
     debug: bool = False
     start_time: float = 0
     difficulty: int = 0
     weight: float = 0.5
-    current_max_depth: int = 2
+    current_depth: int = 0
 
     def debug_search(self, root: Board, moves: list[Move], depth: int) -> None:
         """
@@ -75,25 +75,25 @@ class Engine:
                 results.append(Move(cell, score))
             results.sort(reverse=(root.playing == 1))
             return results, best_depth
-
         return inner
 
     def change_weight(func):
         """
         Decorator to change the weight of the evaluation function
         """
-
         def inner(self, *args, **kwargs):
-            calc_weight = self.time_elapsed
             res = func(self, *args, **kwargs)
             l, h = -self.weight * 0.02, self.weight * 0.02
             n = uniform(l, h)
-            while calc_weight() < self.weight + n:
+            while self.time_elapsed() < self.weight + n:
                 l += 0.01
                 h += 0.01
             return res
-
         return inner
+    
+    @property
+    def max_depth(self) -> int:
+        return self.best_depth
 
     def time_elapsed(self) -> int:
         """
@@ -122,7 +122,7 @@ class Engine:
         """
         if self.is_timeout():
             raise TimeoutError
-        if depth == self.current_max_depth or state.is_game_over():
+        if depth == self.max_depth or state.is_game_over():
             return state.score
         if state.playing == 1:
             score = -float("inf")
@@ -131,8 +131,7 @@ class Engine:
                 score = max(score, self.alpha_beta(state, depth + 1, alpha, beta))
                 state.undo_last_move()
                 alpha = max(alpha, score)
-                if alpha >= beta:
-                    self.cutoff += 1
+                if score >= beta:
                     break
             return score
         else:
@@ -142,8 +141,7 @@ class Engine:
                 score = min(score, self.alpha_beta(state, depth + 1, alpha, beta))
                 state.undo_last_move()
                 beta = min(beta, score)
-                if alpha >= beta:
-                    self.cutoff += 1
+                if score <= alpha:
                     break
             return score
 
@@ -155,14 +153,14 @@ class Engine:
         using alpha-beta pruning
         """
         best = -float("inf") if root.playing == 1 else float("inf")
-        for depth in range(2, self.max_depth + 1):
-            self.current_max_depth = depth
+        for depth in range(2, self.depth_limit + 1):
+            self.best_depth = depth
             try:
                 score = self.alpha_beta(root, depth, -float("inf"), float("inf"))
             except TimeoutError:
                 break
             best = max(best, score)
-        return best, self.current_max_depth
+        return best, self.best_depth
 
     def search(self, root: Board) -> tuple[Move | None, float]:
         """
@@ -172,7 +170,7 @@ class Engine:
         if len(root.stones) < 2:
             print(f"Engine found best move {self.first_move(root).coord} at depth 0")
             return self.first_move(root), self.time_elapsed()
-        if self.max_depth == 1 or len(root.successors) == 1:
+        if self.depth_limit == 1 or len(root.successors) == 1:
             print(f"Engine found best move {root.successors[0]} at depth 1")
             return Move(root.successors[0]), self.time_elapsed()
         results, depth = self.iterative_deepening(root)
